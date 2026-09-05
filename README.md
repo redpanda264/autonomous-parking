@@ -20,6 +20,6 @@ $ conda create --name ENV_NAME python=3.12
 ### Active virtual environment
 $ activate ENV_NAME
 
-### Additional libraries recommended after activting an environment
+### Additional packages recommended after activting an environment
 $ pip install carla\
 $ pip install jupyter
