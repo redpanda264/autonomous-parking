@@ -15,11 +15,11 @@ We're running a conda environment called whatever under examples folder by using
 <img width="1113" height="626" alt="WindowsTerminal_WrlR8GhmZc" src="https://github.com/user-attachments/assets/0706902b-f6c1-4869-bc94-cf2b34b6f03f" />
 
 ### How to create virtual environment
-$ conda create --name ENV_NAME python=3.12\
+$ conda create --name ENV_NAME python=3.12
 
 ### Active virtual environment
-$ activate ENV_NAME\
+$ activate ENV_NAME
 
 ### Additional libraries recommended after activting an environment
 $ pip install carla\
-$ pip install jupyter\
+$ pip install jupyter
