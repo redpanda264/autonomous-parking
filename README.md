@@ -24,4 +24,5 @@ $ activate ENV_NAME
 $ pip install carla\
 $ pip install jupyter\
 $ pip install pygame\
-$ pip install shapely
+$ pip install shapely\
+$ pip install networkx
