@@ -23,5 +23,4 @@ $ activate ENV_NAME
 ### Additional packages recommended after activting an environment
 $ pip install carla\
 $ pip install jupyter\
-$ pip install pygame\
-$ pip install agents
+$ pip install pygame
