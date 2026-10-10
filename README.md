@@ -5,7 +5,7 @@ This project uses CARLA to simulate an autonomous parking system.
 - CARLA
 - Python
 - CARLA Python API
-- If not using windows: Docker for client, Windows emulation for server
+- If not using Windows: Docker for client, Windows emulation for server
 
 ## Workflow
 After downloading CARLA, you should find examples folder under ROOT\CARLA\PythonAPI\examples.\
