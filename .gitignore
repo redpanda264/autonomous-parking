@@ -1,0 +1,56 @@
+# CARLA original example files I don't want to upload
+automatic_control.py
+bounding_boxes.py
+carla_cosmos_gen.py
+check_maps.py
+client_bounding_boxes.py
+cosmos_aov.yaml
+draw_skeleton.py
+dynamic_weather.py
+generate_traffic.py
+get_component_test.py
+invertedai_traffic.py
+lidar_to_camera.py
+manual_control_carsim.py
+manual_control_chrono.py
+manual_control_steeringwheel.py
+manual_control.py
+no_rendering_mode.py
+open3d_lidar.py
+requirements.txt
+sensor_synchronization.py
+show_recorder_actors_blocked.py
+show_recorder_collisions.py
+show_recorder_file_info.py
+start_recording.py
+start_replaying.py
+synchronous_mode.py
+test_addsecondvx.py
+tutorial_gbuffer.py
+tutorial.py
+V2XDemo.py
+vehicle_gallery.py
+vehicle_physics.py
+visualize_multiple_sensors.py
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Python/Conda environments
+env/
+venv/
+.venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# VS Code
+.vscode/
+
+# Logs
+*.log
+
+# Windows
+Thumbs.db
