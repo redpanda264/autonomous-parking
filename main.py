@@ -1,5 +1,6 @@
 import carla
 import time
+from parking.setup import setup
 
 try:
     client = carla.Client('host.docker.internal', 2000)
