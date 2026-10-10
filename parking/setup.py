@@ -33,7 +33,10 @@ def setup():
     ego_bp.set_attribute("role_name", "hero")
     spawn_points = world.get_map().get_spawn_points() # list of all spawn points in map
     ego_spawn_point = carla.Transform(
-        carla.Location(x=-19, y=-46, z=1), carla.Rotation(yaw=90.0)
+        carla.Location(x=-19, y=-47, z=0.8), carla.Rotation(yaw=90.0)
+
+        #parking spot location
+        #carla.Location(x=-13, y=-38.3, z=0.5), carla.Rotation(yaw=0.0)
     )
 
     world.wait_for_tick()

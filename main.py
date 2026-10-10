@@ -1,6 +1,7 @@
 import carla
 import time
 from parking.setup import setup
+from parking.controller import Controller
 
 def main():
     # call setup script and get necessary actor references
@@ -10,17 +11,22 @@ def main():
         print(f"Setup failed: {e}")
         return
 
+    parking_controller = Controller(ego, world)
 
     # parking logic loop
     try:
         while True:
-            # print ego vehicle location
 
             # TODO: add parking logic here
+            parking_controller.control()
+            
 
-            print(f"Ego location: {ego.get_location()}")
-            print(f"Spectator location: {spectator.get_location()}")
+            # print locations for debugging
+            #print(f"Ego location: {ego.get_location()}")
+            #print(f"Spectator location: {spectator.get_location()}")
+
             world.wait_for_tick()
+            
     except KeyboardInterrupt:
         print("Stopping...")
 
