@@ -2,8 +2,34 @@ import carla
 import time
 from parking.setup import setup
 
-try:
-    client = carla.Client('host.docker.internal', 2000)
-    client.set_timeout(10.0)
-except Exception as e:
-    print(f"Error: {e}")
+def main():
+    # call setup script and get necessary actor references
+    try:
+        client, world, ego, spectator = setup()
+    except Exception as e:
+        print(f"Setup failed: {e}")
+        return
+
+
+    # parking logic loop
+    try:
+        while True:
+            # print ego vehicle location
+
+            # TODO: add parking logic here
+
+            print(f"Ego location: {ego.get_location()}")
+            print(f"Spectator location: {spectator.get_location()}")
+            world.wait_for_tick()
+    except KeyboardInterrupt:
+        print("Stopping...")
+
+    finally:
+        # destroy actors, stop parking script
+        ego.destroy()
+        print("Actors destroyed")
+
+
+# run main loop when file is executed directly
+if __name__ == "__main__":
+    main()
