@@ -55,17 +55,18 @@ class Controller:
 
         # spawn ego at the staging position for testing
         ego.set_transform(self.staging_tf)
+        world.wait_for_tick()
 
         # TODO: use reeds-shepp curve, calculate once when in staging position
 
         ego_tf = ego.get_transform()
-        min_turning_radius = 0.5 # meters
+        min_turning_radius = 5.0 # meters
         max_curvature = 1.0 / min_turning_radius
 
         # Reeds-Shepp path algorithm from PythonRobotics
         path_x, path_y, path_yaw, path_curvetype, path_length = reeds_shepp_path_planning(
-            ego_tf.location.x, ego_tf.location.y, ego_tf.rotation.yaw,
-            self.target_tf.location.x, self.target_tf.location.y, self.target_tf.rotation.yaw,
+            ego_tf.location.x, ego_tf.location.y, math.radians(ego_tf.rotation.yaw),
+            self.target_tf.location.x, self.target_tf.location.y, math.radians(self.target_tf.rotation.yaw),
             max_curvature, step_size=0.2
         )
 
@@ -85,11 +86,11 @@ class Controller:
         self.pth_i = 0
 
         # diagnostic
-        print(f"Path X: {self.path.x}")
-        print("----------------------------------------------")
-        print(f"Path Y: {self.path.y}")
-        print("----------------------------------------------")
-        print(f"Path Yaw: {self.path.yaw}")
+        # print(f"Path X: {self.path.x}")
+        # print("----------------------------------------------")
+        # print(f"Path Y: {self.path.y}")
+        # print("----------------------------------------------")
+        # print(f"Path Yaw: {self.path.yaw}")
 
 
 
@@ -101,7 +102,13 @@ class Controller:
 
         # current ego vehicle location/yaw
         ego_loc = self.ego.get_transform().location
-        ego_yaw = self.ego.get_transform().rotation.yaw
+        ego_tf = self.ego.get_transform()
+
+        print(
+            f"index={self.pth_i}, "
+            f"ego=({ego_loc.x:.2f}, {ego_loc.y:.2f}), "
+            f"waypoint=({self.path.x[self.pth_i]:.2f}, {self.path.y[self.pth_i]:.2f}), "
+            f"distance={math.dist((ego_loc.x, ego_loc.y), (self.path.x[self.pth_i], self.path.y[self.pth_i])):.2f}")
 
         if self.pth_i >= len(self.path.x):
             print("Reached parking spot")
@@ -120,29 +127,27 @@ class Controller:
         #     # closer to the next waypoint, change direction
         #     self.pth_i += 1
 
-        waypoint_x = self.path.x[self.pth_i]
-        waypoint_y = self.path.y[self.pth_i]
-        dx = waypoint_x - ego_loc.x
-        dy = waypoint_y - ego_loc.y
-
-        if (dx < 0):
-            # if the waypoint is behind the ego vehicle, reverse
-            throttle = 0.2
-        else:
-            # if the vehicle is past waypoint, change to the next waypoint
+        if math.dist((ego_loc.x, ego_loc.y), (self.path.x[self.pth_i], self.path.y[self.pth_i])) < 0.1:
+            # if within 1m of the current waypoint, move to the next one
             self.pth_i += 1
             return
-
-        if (dy < 0):
-            # if the waypoint is to the left of the ego vehicle, steer left
-            steer = -0.5
         else:
-            # if the waypoint is to the right of the ego vehicle, steer right
-            steer = 0.5
-    
+            dx = self.path.x[self.pth_i] - ego_loc.x
+            dy = self.path.y[self.pth_i] - ego_loc.y
+
+            right_vec = ego_tf.get_right_vector()
+            forward_vec = ego_tf.get_forward_vector()
+
+            lateral = dx * right_vec.x + dy * right_vec.y
+            longitudinal = dx * forward_vec.x + dy * forward_vec.y
+            gain = 0.5 # steering strength
+
+            angle = math.atan2(lateral, max(abs(longitudinal), 0.1))
+            steer = max(-1.0, min(1.0, -gain * angle))  # reverse: flip the sign
 
 
-        control = carla.VehicleControl(throttle=throttle, steer=steer, reverse=True)
+        print(f"index: {self.pth_i}, distance: {math.dist((ego_loc.x, ego_loc.y), (self.path.x[self.pth_i], self.path.y[self.pth_i]))}, steer: {steer:.2f}")
+        control = carla.VehicleControl(throttle=0.3, steer=steer, reverse=True)
         self.ego.apply_control(control)
 
 
