@@ -1,5 +1,16 @@
 import carla
 import math
+from dataclasses import dataclass
+from parking.reeds_shepp_path_planning import reeds_shepp_path_planning
+
+# dataclass to hold path data
+@dataclass
+class SheppPath:
+    x: list[float]
+    y: list[float]
+    yaw: list[float]
+    curves: list[str]
+    lengths: list[float]
 
 class Controller:
     def __init__(self, ego, world):
@@ -45,12 +56,36 @@ class Controller:
         # spawn ego at the staging position for testing
         ego.set_transform(self.staging_tf)
 
+        # TODO: use reeds-shepp curve, calculate once when in staging position
+
+        min_turning_radius = 5.0 # meters
+        max_curvature = 1.0 / min_turning_radius
+
+        path_x, path_y, path_yaw, path_curvetype, path_length = reeds_shepp_path_planning(
+            
+        )
+
+        # error checking
+        if path_x is None or path_y is None or path_yaw is None or path_curvetype is None or path_length is None:
+            raise RuntimeError("Path planning failed")
+
+        self.path = SheppPath(
+            x=path_x,
+            y=path_y,
+            yaw=path_yaw,
+            curves=path_curvetype,
+            lengths=path_length
+        )
+
+
+
+
 
 
 
     def control(self):
 
-        # TODO: use reeds-shepp curve, calculate once when in staging position
+        
 
         # TODO: control algorithm to minimize distance to curve
 
