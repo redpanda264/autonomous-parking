@@ -50,6 +50,10 @@ class Controller:
 
     def control(self):
 
+        # TODO: use reeds-shepp curve, calculate once when in staging position
+
+        # TODO: control algorithm to minimize distance to curve
+
         return
 
 
