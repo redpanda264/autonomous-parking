@@ -58,11 +58,15 @@ class Controller:
 
         # TODO: use reeds-shepp curve, calculate once when in staging position
 
+        ego_tf = ego.get_transform()
         min_turning_radius = 5.0 # meters
         max_curvature = 1.0 / min_turning_radius
 
+        # Reeds-Shepp path algorithm from PythonRobotics
         path_x, path_y, path_yaw, path_curvetype, path_length = reeds_shepp_path_planning(
-            
+            ego_tf.location.x, ego_tf.location.y, ego_tf.rotation.yaw,
+            self.target_tf.location.x, self.target_tf.location.y, self.target_tf.rotation.yaw,
+            max_curvature, step_size=0.2
         )
 
         # error checking
@@ -77,9 +81,15 @@ class Controller:
             lengths=path_length
         )
 
+        # path index
+        self.pth_i = 0
 
-
-
+        # diagnostic
+        print(f"Path X: {self.path.x}")
+        print("----------------------------------------------")
+        print(f"Path Y: {self.path.y}")
+        print("----------------------------------------------")
+        print(f"Path Yaw: {self.path.yaw}")
 
 
 
@@ -89,7 +99,36 @@ class Controller:
 
         # TODO: control algorithm to minimize distance to curve
 
-        return
+        # current ego vehicle location/yaw
+        ego_loc = self.ego.get_transform().location
+        ego_yaw = self.ego.get_transform().rotation.yaw
+
+        if self.pth_i >= len(self.path.x):
+            print("Reached parking spot")
+            control = carla.VehicleControl(throttle=0.0, steer=0.0, brake=1.0)
+            self.ego.apply_control(control)
+            return
+
+        if ( self.pth_i >= len(self.path.x) - 1 or                        # at end of waypoint list
+            math.dist((ego_loc.x, ego_loc.y), (self.path.x[self.pth_i], self.path.y[self.pth_i])) # dist to current waypoint
+            <
+            math.dist((ego_loc.x, ego_loc.y), (self.path.x[self.pth_i+1], self.path.y[self.pth_i+1])) #dist to next waypoint
+        ):
+            # on the last waypoint, or closer to current waypoint, keep backing up in same direction
+            pass
+        else:
+            # closer to the next waypoint, change direction
+            self.pth_i += 1
+
+        waypoint_x = self.path.x[self.pth_i], waypoint_y = self.path.y[self.pth_i]
+        dx = waypoint_x - ego_loc.x
+        dy = waypoint_y - ego_loc.y
+        
+
+
+
+        control = carla.VehicleControl(throttle=-0.2, steer=0.0, reverse=True)
+        self.ego.apply_control(control)
 
 
 
