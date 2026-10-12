@@ -52,7 +52,7 @@ def setup():
     spectator.set_transform(
         carla.Transform(
             ego.get_location() + carla.Location(x=2, y=0, z=2),
-            carla.Rotation(yaw=180) # turn around
+            carla.Rotation(yaw=90) # turn around
         )
     )
 
