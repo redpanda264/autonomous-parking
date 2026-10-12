@@ -109,25 +109,40 @@ class Controller:
             self.ego.apply_control(control)
             return
 
-        if ( self.pth_i >= len(self.path.x) - 1 or                        # at end of waypoint list
-            math.dist((ego_loc.x, ego_loc.y), (self.path.x[self.pth_i], self.path.y[self.pth_i])) # dist to current waypoint
-            <
-            math.dist((ego_loc.x, ego_loc.y), (self.path.x[self.pth_i+1], self.path.y[self.pth_i+1])) #dist to next waypoint
-        ):
-            # on the last waypoint, or closer to current waypoint, keep backing up in same direction
-            pass
-        else:
-            # closer to the next waypoint, change direction
-            self.pth_i += 1
+        # if ( self.pth_i >= len(self.path.x) - 1 or                        # at end of waypoint list
+        #     math.dist((ego_loc.x, ego_loc.y), (self.path.x[self.pth_i], self.path.y[self.pth_i])) # dist to current waypoint
+        #     <
+        #     math.dist((ego_loc.x, ego_loc.y), (self.path.x[self.pth_i+1], self.path.y[self.pth_i+1])) #dist to next waypoint
+        # ):
+        #     # on the last waypoint, or closer to current waypoint, keep backing up in same direction
+        #     pass
+        # else:
+        #     # closer to the next waypoint, change direction
+        #     self.pth_i += 1
 
-        waypoint_x = self.path.x[self.pth_i], waypoint_y = self.path.y[self.pth_i]
+        waypoint_x = self.path.x[self.pth_i]
+        waypoint_y = self.path.y[self.pth_i]
         dx = waypoint_x - ego_loc.x
         dy = waypoint_y - ego_loc.y
-        
+
+        if (dx < 0):
+            # if the waypoint is behind the ego vehicle, reverse
+            throttle = 0.2
+        else:
+            # if the vehicle is past waypoint, change to the next waypoint
+            self.pth_i += 1
+            return
+
+        if (dy < 0):
+            # if the waypoint is to the left of the ego vehicle, steer left
+            steer = -0.5
+        else:
+            # if the waypoint is to the right of the ego vehicle, steer right
+            steer = 0.5
+    
 
 
-
-        control = carla.VehicleControl(throttle=-0.2, steer=0.0, reverse=True)
+        control = carla.VehicleControl(throttle=throttle, steer=steer, reverse=True)
         self.ego.apply_control(control)
 
 
