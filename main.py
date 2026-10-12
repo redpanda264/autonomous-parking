@@ -11,6 +11,8 @@ def main():
         print(f"Setup failed: {e}")
         return
 
+    # TODO: create navigation controller
+
     parking_controller = Controller(ego, world)
 
     # parking logic loop

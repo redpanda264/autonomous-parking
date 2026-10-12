@@ -44,7 +44,7 @@ class Controller:
 
         # move the rotated target transform right and backwards
         staging_loc = staging_basis_tf.transform(
-            carla.Location(x=5.0, y=5.0, z=0.0)
+            carla.Location(x=6.0, y=5.0, z=0.0)
         )
 
         # final staging transform
@@ -59,7 +59,7 @@ class Controller:
         # TODO: use reeds-shepp curve, calculate once when in staging position
 
         ego_tf = ego.get_transform()
-        min_turning_radius = 5.0 # meters
+        min_turning_radius = 0.5 # meters
         max_curvature = 1.0 / min_turning_radius
 
         # Reeds-Shepp path algorithm from PythonRobotics
