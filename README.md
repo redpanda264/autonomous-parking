@@ -1,11 +1,11 @@
 # autonomous-parking
 This project uses CARLA to simulate an autonomous parking system.
 
-## Credits & Requirements
-- CARLA Simulator
+## Requirements
+- CARLA
 - Python
 - CARLA Python API
-- Path Planning: The core Reeds-Shepp geometric formula used in this project is adapted from the open-source PythonRobotics repository by Atsushi Sakai. Licensed under the MIT License.
+- If not using Windows: Docker for client, Windows emulation for server
 
 ## Workflow
 After downloading CARLA, you should find examples folder under ROOT\CARLA\PythonAPI\examples.\
@@ -27,4 +27,3 @@ $ pip install jupyter\
 $ pip install pygame\
 $ pip install shapely\
 $ pip install networkx
-
