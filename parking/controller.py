@@ -28,10 +28,8 @@ class Controller:
             carla.Rotation(yaw=180.0),
         )
 
-        initial_ego_tf = ego.get_transform()
-
         # assume car is aligned with the aisle
-        self.aisle_rotation = carla.Rotation(yaw=initial_ego_tf.rotation.yaw)
+        self.aisle_rotation = carla.Rotation(yaw=90.0) # hard coded for now, should be calculated from aisle
 
         # -- Calculate staging position --
     
@@ -57,7 +55,7 @@ class Controller:
         ego.set_transform(self.staging_tf)
         world.wait_for_tick()
 
-        # TODO: use reeds-shepp curve, calculate once when in staging position
+        # use reeds-shepp curve, calculate once when in staging position
 
         ego_tf = ego.get_transform()
         min_turning_radius = 5.0 # meters
@@ -86,11 +84,22 @@ class Controller:
         self.pth_i = 0
 
         # diagnostic
-        # print(f"Path X: {self.path.x}")
-        # print("----------------------------------------------")
-        # print(f"Path Y: {self.path.y}")
-        # print("----------------------------------------------")
-        # print(f"Path Yaw: {self.path.yaw}")
+        print(f"Path X: {self.path.x}")
+        print("----------------------------------------------")
+        print(f"Path Y: {self.path.y}")
+        print("----------------------------------------------")
+        print(f"Path Yaw: {self.path.yaw}")
+        print("----------------------------------------------")
+        print(f"Path curves: {self.path.curves}")
+        print("----------------------------------------------")
+        print(f"Path lengths: {self.path.lengths}")
+
+        # print("Staging:", ego_tf.location.x, ego_tf.location.y)
+        # print("Target:", self.target_tf.location.x, self.target_tf.location.y)
+        # print("staging yaw:", self.staging_tf.rotation.yaw)
+
+        # print("First waypoint:", path_x[0], path_y[0])
+        # print("Last waypoint:", path_x[-1], path_y[-1])
 
 
 
@@ -103,12 +112,6 @@ class Controller:
         # current ego vehicle location/yaw
         ego_loc = self.ego.get_transform().location
         ego_tf = self.ego.get_transform()
-
-        print(
-            f"index={self.pth_i}, "
-            f"ego=({ego_loc.x:.2f}, {ego_loc.y:.2f}), "
-            f"waypoint=({self.path.x[self.pth_i]:.2f}, {self.path.y[self.pth_i]:.2f}), "
-            f"distance={math.dist((ego_loc.x, ego_loc.y), (self.path.x[self.pth_i], self.path.y[self.pth_i])):.2f}")
 
         if self.pth_i >= len(self.path.x):
             print("Reached parking spot")
@@ -128,27 +131,28 @@ class Controller:
         #     self.pth_i += 1
 
         if math.dist((ego_loc.x, ego_loc.y), (self.path.x[self.pth_i], self.path.y[self.pth_i])) < 0.1:
-            # if within 1m of the current waypoint, move to the next one
+            # if within 0.1m of the current waypoint, move to the next one
             self.pth_i += 1
             return
         else:
             dx = self.path.x[self.pth_i] - ego_loc.x
             dy = self.path.y[self.pth_i] - ego_loc.y
 
-            right_vec = ego_tf.get_right_vector()
-            forward_vec = ego_tf.get_forward_vector()
+            ego_yaw_rad = math.radians(ego_tf.rotation.yaw)
 
-            lateral = dx * right_vec.x + dy * right_vec.y
-            longitudinal = dx * forward_vec.x + dy * forward_vec.y
-            gain = 0.5 # steering strength
+            path_angle = math.atan2(dy, dx)
 
-            angle = math.atan2(lateral, max(abs(longitudinal), 0.1))
-            steer = max(-1.0, min(1.0, -gain * angle))  # reverse: flip the sign
+            yaw_error = path_angle - ego_yaw_rad
+
+            # normalize yaw error to [-pi, pi]
+            yaw_error = (yaw_error + math.pi) % (2 * math.pi) - math.pi
 
 
-        print(f"index: {self.pth_i}, distance: {math.dist((ego_loc.x, ego_loc.y), (self.path.x[self.pth_i], self.path.y[self.pth_i]))}, steer: {steer:.2f}")
-        control = carla.VehicleControl(throttle=0.3, steer=steer, reverse=True)
-        self.ego.apply_control(control)
+
+
+        #print(f"index: {self.pth_i}, distance: {math.dist((ego_loc.x, ego_loc.y), (self.path.x[self.pth_i], self.path.y[self.pth_i]))}, steer: {steer:.2f}")
+        #control = carla.VehicleControl(throttle=0.3, steer=steer, reverse=True)
+        #self.ego.apply_control(control)
 
 
 

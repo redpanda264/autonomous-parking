@@ -56,8 +56,8 @@ def setup():
         )
     )
 
-    print(f"Ego location: {ego.get_location()}")
-    print(f"Spectator location: {spectator.get_location()}")
+    #print(f"Ego location: {ego.get_location()}")
+    #print(f"Spectator location: {spectator.get_location()}")
 
     # print all actors
     # actors = world.get_actors()
