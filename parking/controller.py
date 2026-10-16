@@ -12,6 +12,7 @@ class SheppPath:
     curves: list[str]
     lengths: list[float]
     segment_idxs: list[int]
+    directions: list[int]
 
 class Controller:
     def __init__(self, ego, world):
@@ -31,9 +32,6 @@ class Controller:
 
         # assume car is aligned with the aisle
         self.aisle_rotation = carla.Rotation(yaw=90.0) # hard coded for now, should be calculated from aisle
-
-        # -- Calculate staging position --
-    
 
         # rotate target transform to align with ego and aisle
         staging_basis_tf = carla.Transform(
@@ -88,14 +86,14 @@ class Controller:
         max_curvature = 1.0 / min_turning_radius
 
         # Reeds-Shepp path algorithm from PythonRobotics
-        path_x, path_y, path_yaw, path_curvetype, path_length, path_segment_idxs = reeds_shepp_path_planning(
+        path_x, path_y, path_yaw, path_curvetype, path_length, path_segment_idxs, path_directions = reeds_shepp_path_planning(
             ego_tf.location.x, ego_tf.location.y, math.radians(ego_tf.rotation.yaw),
             self.target_tf.location.x, self.target_tf.location.y, math.radians(self.target_tf.rotation.yaw),
             max_curvature, step_size=0.2
         )
 
         # error checking
-        if path_x is None or path_y is None or path_yaw is None or path_curvetype is None or path_length is None:
+        if path_x is None or path_y is None or path_yaw is None or path_curvetype is None or path_length is None or path_segment_idxs is None or path_directions is None:
             raise RuntimeError("Path planning failed")
 
         self.path = SheppPath(
@@ -104,7 +102,8 @@ class Controller:
             yaw=path_yaw,
             curves=path_curvetype,
             lengths=path_length,
-            segment_idxs=path_segment_idxs
+            segment_idxs=path_segment_idxs,
+            directions=path_directions
         )
 
         # path index
@@ -122,6 +121,8 @@ class Controller:
         # print(f"Path lengths: {self.path.lengths}")
         # print("----------------------------------------------")
         # print(f"Path segment indices: {self.path.segment_idxs}")
+        # print("----------------------------------------------")
+        # print(f"Path directions: {self.path.directions}")
 
         # print("Staging:", ego_tf.location.x, ego_tf.location.y)
         # print("Target:", self.target_tf.location.x, self.target_tf.location.y)
@@ -152,6 +153,8 @@ class Controller:
             self.ego.apply_control(control)
             return
 
+        
+
         # control
 
         lookAheadDist = 1.0 # hard-coded distance to look ahead point
@@ -167,13 +170,18 @@ class Controller:
         alpha = math.atan2(dy, dx) - ego_yaw
         alpha = (alpha + math.pi) % (2 * math.pi) - math.pi
         Ld = math.hypot(dx, dy) # lookahead distance
+        if Ld < 1e-6:
+            print("cannot divide by 0")
+            return
+        
         kappa = 2 * math.sin(alpha) / Ld # curvature
 
         # kinematic bicycle model (convert curvature from pure pursuit to steering angle)
         delta = math.atan(self.wheelbase*kappa)
         steering_angle = delta / self.max_steer_angle
-        steering_angle = max(-1, min(-1, steering_angle))
+        steering_angle = max(-1, min(1, steering_angle))
 
+        #reverse = seg_direction < 0
         control = carla.VehicleControl(throttle=0.2, steer=steering_angle, brake=0.0, reverse=True)
         self.ego.apply_control(control)
 

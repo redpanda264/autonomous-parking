@@ -7,7 +7,7 @@ co-author Videh Patel(@videh25) : Added the missing RS paths
 
 
 Modified by Ryan Vance(@redpanda264), 2026
-Mapped path segments to x and y values
+Mapped path segments to x and y values, return directions array
 
 """
 
@@ -438,11 +438,16 @@ def reeds_shepp_path_planning(sx, sy, syaw, gx, gy, gyaw, maxc, step_size=0.2):
     if not paths:
         return None, None, None, None, None  # could not generate any path
 
-    # search minimum cost path
-    best_path_index = paths.index(min(paths, key=lambda p: abs(p.L)))
-    b_path = paths[best_path_index]
+    reverse_paths = [
+        path for path in paths
+        if all(length <= 0.0 for length in path.lengths)
+    ]
+    if not reverse_paths:
+        return None, None, None, None, None, None, None
+    # shortest reverse path
+    b_path = min(reverse_paths, key=lambda p: abs(p.L))
 
-    return b_path.x, b_path.y, b_path.yaw, b_path.ctypes, b_path.lengths, b_path.segment_idxs
+    return b_path.x, b_path.y, b_path.yaw, b_path.ctypes, b_path.lengths, b_path.segment_idxs, b_path.directions
 
 
 def main():
