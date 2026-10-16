@@ -26,22 +26,16 @@ class Controller:
         #)
 
         self.target_tf = carla.Transform(
-            carla.Location(x=-13, y=-27.2),
-            carla.Rotation(yaw=180.0),
+            carla.Location(x=-13, y=-27.2, z=0.5),
+            carla.Rotation(yaw=180),
         )
 
         # assume car is aligned with the aisle
         self.aisle_rotation = carla.Rotation(yaw=90.0) # hard coded for now, should be calculated from aisle
 
-        # rotate target transform to align with ego and aisle
-        staging_basis_tf = carla.Transform(
-            self.target_tf.location,
-            self.aisle_rotation
-        )
-
         # move the rotated target transform right and backwards
-        staging_loc = staging_basis_tf.transform(
-            carla.Location(x=6.0, y=5.0, z=0.0)
+        staging_loc = self.target_tf.transform(
+            carla.Location(x=5.0, y=-5.0, z=0.0)
         )
 
         # final staging transform
