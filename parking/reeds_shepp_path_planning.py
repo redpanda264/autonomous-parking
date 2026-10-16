@@ -5,6 +5,10 @@ Reeds Shepp path planner sample code
 author Atsushi Sakai(@Atsushi_twi)
 co-author Videh Patel(@videh25) : Added the missing RS paths
 
+
+Modified by Ryan Vance(@redpanda264), 2026
+Mapped path segments to x and y values
+
 """
 
 
@@ -360,9 +364,9 @@ def generate_local_course(lengths, modes, max_curvature, step_size):
 
     origin_x, origin_y, origin_yaw = 0.0, 0.0, 0.0
 
-    xs, ys, yaws, directions = [], [], [], []
-    for (interp_dists, mode, length) in zip(interpolate_dists_list, modes,
-                                            lengths):
+    xs, ys, yaws, directions, segment_idxs = [], [], [], [], []
+    for i, (interp_dists, mode, length) in enumerate (zip(interpolate_dists_list, modes,
+                                            lengths)):
 
         for dist in interp_dists:
             x, y, yaw, direction = interpolate(dist, length, mode,
@@ -372,11 +376,13 @@ def generate_local_course(lengths, modes, max_curvature, step_size):
             ys.append(y)
             yaws.append(yaw)
             directions.append(direction)
+            segment_idxs.append(i)
+
         origin_x = xs[-1]
         origin_y = ys[-1]
         origin_yaw = yaws[-1]
 
-    return xs, ys, yaws, directions
+    return xs, ys, yaws, directions, segment_idxs
 
 
 def interpolate(dist, length, mode, max_curvature, origin_x, origin_y,
@@ -409,7 +415,7 @@ def calc_paths(sx, sy, syaw, gx, gy, gyaw, maxc, step_size):
 
     paths = generate_path(q0, q1, maxc, step_size)
     for path in paths:
-        xs, ys, yaws, directions = generate_local_course(path.lengths,
+        xs, ys, yaws, directions, segment_idxs = generate_local_course(path.lengths,
                                                          path.ctypes, maxc,
                                                          step_size)
 
@@ -420,6 +426,7 @@ def calc_paths(sx, sy, syaw, gx, gy, gyaw, maxc, step_size):
                   (ix, iy) in zip(xs, ys)]
         path.yaw = [pi_2_pi(yaw + q0[2]) for yaw in yaws]
         path.directions = directions
+        path.segment_idxs = segment_idxs
         path.lengths = [length / maxc for length in path.lengths]
         path.L = path.L / maxc
 
@@ -435,7 +442,7 @@ def reeds_shepp_path_planning(sx, sy, syaw, gx, gy, gyaw, maxc, step_size=0.2):
     best_path_index = paths.index(min(paths, key=lambda p: abs(p.L)))
     b_path = paths[best_path_index]
 
-    return b_path.x, b_path.y, b_path.yaw, b_path.ctypes, b_path.lengths
+    return b_path.x, b_path.y, b_path.yaw, b_path.ctypes, b_path.lengths, b_path.segment_idxs
 
 
 def main():

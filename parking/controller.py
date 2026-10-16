@@ -11,6 +11,7 @@ class SheppPath:
     yaw: list[float]
     curves: list[str]
     lengths: list[float]
+    segment_idxs: list[int]
 
 class Controller:
     def __init__(self, ego, world):
@@ -55,14 +56,39 @@ class Controller:
         ego.set_transform(self.staging_tf)
         world.wait_for_tick()
 
+
+        # TODO: Hard-coding wheelbase for now to calculate steering angle, this code is inconsistent. Change later.
+        self.wheelbase = 1.571
+
+        # physics = self.ego.get_physics_control()
+        # wheels = physics.wheels
+
+        # front_x = (wheels[0].position.x + wheels[1].position.x) / 2
+        # rear_x = (wheels[2].position.x + wheels[3].position.x) / 2
+
+        # self.wheelbase = abs(front_x - rear_x)
+
+        # print(f"Wheelbase: {self.wheelbase:.3f} m")
+
         # use reeds-shepp curve, calculate once when in staging position
+
+        physics = ego.get_physics_control()
+
+
+        # check wheel max steer
+        for wheel in physics.wheels:
+            if wheel.max_steer_angle > 0:
+                self.max_steer_angle = math.radians(wheel.max_steer_angle)
+                break
+
+
 
         ego_tf = ego.get_transform()
         min_turning_radius = 5.0 # meters
         max_curvature = 1.0 / min_turning_radius
 
         # Reeds-Shepp path algorithm from PythonRobotics
-        path_x, path_y, path_yaw, path_curvetype, path_length = reeds_shepp_path_planning(
+        path_x, path_y, path_yaw, path_curvetype, path_length, path_segment_idxs = reeds_shepp_path_planning(
             ego_tf.location.x, ego_tf.location.y, math.radians(ego_tf.rotation.yaw),
             self.target_tf.location.x, self.target_tf.location.y, math.radians(self.target_tf.rotation.yaw),
             max_curvature, step_size=0.2
@@ -77,22 +103,25 @@ class Controller:
             y=path_y,
             yaw=path_yaw,
             curves=path_curvetype,
-            lengths=path_length
+            lengths=path_length,
+            segment_idxs=path_segment_idxs
         )
 
         # path index
         self.pth_i = 0
 
         # diagnostic
-        print(f"Path X: {self.path.x}")
-        print("----------------------------------------------")
-        print(f"Path Y: {self.path.y}")
-        print("----------------------------------------------")
-        print(f"Path Yaw: {self.path.yaw}")
-        print("----------------------------------------------")
-        print(f"Path curves: {self.path.curves}")
-        print("----------------------------------------------")
-        print(f"Path lengths: {self.path.lengths}")
+        # print(f"Path X: {self.path.x}")
+        # print("----------------------------------------------")
+        # print(f"Path Y: {self.path.y}")
+        # print("----------------------------------------------")
+        # print(f"Path Yaw: {self.path.yaw}")
+        # print("----------------------------------------------")
+        # print(f"Path curves: {self.path.curves}")
+        # print("----------------------------------------------")
+        # print(f"Path lengths: {self.path.lengths}")
+        # print("----------------------------------------------")
+        # print(f"Path segment indices: {self.path.segment_idxs}")
 
         # print("Staging:", ego_tf.location.x, ego_tf.location.y)
         # print("Target:", self.target_tf.location.x, self.target_tf.location.y)
@@ -105,55 +134,48 @@ class Controller:
 
     def control(self):
 
-        
-
-        # TODO: control algorithm to minimize distance to curve
+        # pure pursuit control algorithm to follow path planning
 
         # current ego vehicle location/yaw
         ego_loc = self.ego.get_transform().location
         ego_tf = self.ego.get_transform()
+        ego_yaw = math.radians(ego_tf.rotation.yaw)
 
+        if math.dist((ego_loc.x, ego_loc.y), (self.path.x[self.pth_i], self.path.y[self.pth_i])) < 0.3:
+            # next waypoint
+            self.pth_i += 1
+
+        # if reached end of waypoints
         if self.pth_i >= len(self.path.x):
             print("Reached parking spot")
             control = carla.VehicleControl(throttle=0.0, steer=0.0, brake=1.0)
             self.ego.apply_control(control)
             return
 
-        # if ( self.pth_i >= len(self.path.x) - 1 or                        # at end of waypoint list
-        #     math.dist((ego_loc.x, ego_loc.y), (self.path.x[self.pth_i], self.path.y[self.pth_i])) # dist to current waypoint
-        #     <
-        #     math.dist((ego_loc.x, ego_loc.y), (self.path.x[self.pth_i+1], self.path.y[self.pth_i+1])) #dist to next waypoint
-        # ):
-        #     # on the last waypoint, or closer to current waypoint, keep backing up in same direction
-        #     pass
-        # else:
-        #     # closer to the next waypoint, change direction
-        #     self.pth_i += 1
+        # control
 
-        if math.dist((ego_loc.x, ego_loc.y), (self.path.x[self.pth_i], self.path.y[self.pth_i])) < 0.1:
-            # if within 0.1m of the current waypoint, move to the next one
-            self.pth_i += 1
-            return
-        else:
-            dx = self.path.x[self.pth_i] - ego_loc.x
-            dy = self.path.y[self.pth_i] - ego_loc.y
+        lookAheadDist = 1.0 # hard-coded distance to look ahead point
+        lookAheadIdx = len(self.path.x) - 1
+        for i in range(self.pth_i, len(self.path.x)):
+            if math.dist((ego_loc.x, ego_loc.y), (self.path.x[i], self.path.y[i])) >= lookAheadDist:
+                lookAheadIdx = i
+                break
 
-            ego_yaw_rad = math.radians(ego_tf.rotation.yaw)
+        # find heading error (alpha) and normalize to [-pi, pi]
+        dx = self.path.x[lookAheadIdx] - ego_loc.x
+        dy = self.path.y[lookAheadIdx] - ego_loc.y
+        alpha = math.atan2(dy, dx) - ego_yaw
+        alpha = (alpha + math.pi) % (2 * math.pi) - math.pi
+        Ld = math.hypot(dx, dy) # lookahead distance
+        kappa = 2 * math.sin(alpha) / Ld # curvature
 
-            path_angle = math.atan2(dy, dx)
+        # kinematic bicycle model (convert curvature from pure pursuit to steering angle)
+        delta = math.atan(self.wheelbase*kappa)
+        steering_angle = delta / self.max_steer_angle
+        steering_angle = max(-1, min(-1, steering_angle))
 
-            yaw_error = path_angle - ego_yaw_rad
-
-            # normalize yaw error to [-pi, pi]
-            yaw_error = (yaw_error + math.pi) % (2 * math.pi) - math.pi
-
-
-
-
-        #print(f"index: {self.pth_i}, distance: {math.dist((ego_loc.x, ego_loc.y), (self.path.x[self.pth_i], self.path.y[self.pth_i]))}, steer: {steer:.2f}")
-        #control = carla.VehicleControl(throttle=0.3, steer=steer, reverse=True)
-        #self.ego.apply_control(control)
-
+        control = carla.VehicleControl(throttle=0.2, steer=steering_angle, brake=0.0, reverse=True)
+        self.ego.apply_control(control)
 
 
         # TODO: move driving logic into another controller class
