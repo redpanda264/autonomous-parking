@@ -154,7 +154,8 @@ def left_right_x_left(x, y, phi):
 
     if u1 <= 4.0:
         u = math.acos(1 - u1**2 * 0.125)
-        A = math.asin(2 * math.sin(u) / u1)
+        #A = math.asin(2 * math.sin(u) / u1)
+        A = math.acos(u1 / 4.0)
         t = mod2pi(-A + theta + math.pi/2)
         v = mod2pi(t - u - phi)
         return True, [t, u, -v], ['L', 'R', 'L']
@@ -436,16 +437,11 @@ def calc_paths(sx, sy, syaw, gx, gy, gyaw, maxc, step_size):
 def reeds_shepp_path_planning(sx, sy, syaw, gx, gy, gyaw, maxc, step_size=0.2):
     paths = calc_paths(sx, sy, syaw, gx, gy, gyaw, maxc, step_size)
     if not paths:
-        return None, None, None, None, None  # could not generate any path
+        return None, None, None, None, None, None, None  # could not generate any path
 
-    reverse_paths = [
-        path for path in paths
-        if all(length <= 0.0 for length in path.lengths)
-    ]
-    if not reverse_paths:
-        return None, None, None, None, None, None, None
-    # shortest reverse path
-    b_path = min(reverse_paths, key=lambda p: abs(p.L))
+    # search minimum cost path
+    best_path_index = paths.index(min(paths, key=lambda p: abs(p.L)))
+    b_path = paths[best_path_index]
 
     return b_path.x, b_path.y, b_path.yaw, b_path.ctypes, b_path.lengths, b_path.segment_idxs, b_path.directions
 

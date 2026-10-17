@@ -103,7 +103,7 @@ class Controller:
         # path index
         self.pth_i = 0
 
-        # diagnostic
+        # diagnostic path values
         # print(f"Path X: {self.path.x}")
         # print("----------------------------------------------")
         # print(f"Path Y: {self.path.y}")
@@ -147,8 +147,6 @@ class Controller:
             self.ego.apply_control(control)
             return
 
-        
-
         # control
 
         lookAheadDist = 1.0 # hard-coded distance to look ahead point
@@ -167,6 +165,10 @@ class Controller:
         if Ld < 1e-6:
             print("cannot divide by 0")
             return
+
+        print(f"pth_i: {self.pth_i}")
+        print(f"lookahed idx: {lookAheadIdx}")
+        print(f"lookahed dist: {Ld}")
         
         kappa = 2 * math.sin(alpha) / Ld # curvature
 

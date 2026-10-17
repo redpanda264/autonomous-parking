@@ -45,12 +45,12 @@ def setup():
         print(f"Failed to spawn ego vehicle: {e}")
 
 
-    world.wait_for_tick() # Wait for the world to spawn vehicle before teleporting, doesn't work otherwise.
-    # Teleport spectator to a position above the ego vehicle
+    #world.wait_for_tick() # Wait for the world to spawn vehicle before teleporting, doesn't work otherwise.
+    # Teleport spectator to a top-down position
     spectator.set_transform(
         carla.Transform(
-            ego.get_location() + carla.Location(x=2, y=0, z=2),
-            carla.Rotation(yaw=90) # turn around
+            carla.Location(x=-13, y=-27.2, z=10),
+            carla.Rotation(yaw=90, pitch=0, roll=0)
         )
     )
 
