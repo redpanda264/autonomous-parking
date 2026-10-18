@@ -33,10 +33,8 @@ def setup():
     ego_bp.set_attribute("role_name", "hero")
     spawn_points = world.get_map().get_spawn_points() # list of all spawn points in map
     ego_spawn_point = carla.Transform(
-        carla.Location(x=-19, y=-47, z=0.8), carla.Rotation(yaw=90.0)
-
-        #parking spot location
-        #carla.Location(x=-13, y=-38.3, z=0.5), carla.Rotation(yaw=0.0)
+        carla.Location(x=0, y=0, z=0.5),
+        carla.Rotation(yaw=180),
     )
 
     world.wait_for_tick()
@@ -46,22 +44,42 @@ def setup():
     except Exception as e:
         print(f"Failed to spawn ego vehicle: {e}")
 
-
-    world.wait_for_tick() # Wait for the world to spawn vehicle before teleporting, doesn't work otherwise.
-    # Teleport spectator to a position above the ego vehicle
-    spectator.set_transform(
+    # spawn vehicles to left and right of the target space (for testing)
+    parked_bp = blueprints.find("vehicle.audi.tt")
+    left_vehicle = world.try_spawn_actor(
+        parked_bp,
         carla.Transform(
-            ego.get_location() + carla.Location(x=2, y=0, z=2),
-            carla.Rotation(yaw=90) # turn around
+            carla.Location(x=-13, y=-24.5, z=0.5),
+            carla.Rotation(yaw=180)
         )
     )
 
-    print(f"Ego location: {ego.get_location()}")
-    print(f"Spectator location: {spectator.get_location()}")
+    right_vehicle = world.try_spawn_actor(
+        parked_bp,
+        carla.Transform(
+            carla.Location(x=-13, y=-30, z=0.5),
+            carla.Rotation(yaw=180)
+        )
+    )
+
+    spawned_vehicles = [left_vehicle, right_vehicle]
+
+
+    #world.wait_for_tick() # Wait for the world to spawn vehicle before teleporting, doesn't work otherwise.
+    # Teleport spectator to a top-down position
+    spectator.set_transform(
+        carla.Transform(
+            carla.Location(x=-13, y=-27.2, z=10),
+            carla.Rotation(yaw=90, pitch=0, roll=0)
+        )
+    )
+
+    #print(f"Ego location: {ego.get_location()}")
+    #print(f"Spectator location: {spectator.get_location()}")
 
     # print all actors
     # actors = world.get_actors()
     # for actor in actors:
     #     print(f"Actor ID: {actor.id}, Type: {actor.type_id}, Location: {actor.get_location()}")
 
-    return client, world, ego, spectator
+    return client, world, ego, spectator, spawned_vehicles
