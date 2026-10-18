@@ -115,15 +115,31 @@ class Controller:
         ego_loc = self.ego.get_transform().location
         ego_tf = self.ego.get_transform()
         ego_yaw = math.radians(ego_tf.rotation.yaw)
-        
+        reverse_yaw = ego_yaw - math.pi
+
         self.pth_i = self.closest_nondecreasing_path_index()
-        #min_lookahead = 0.7
-        #max_lookahead = 1.5
-        lookahead_dist = 1.2
 
-        #lookahead_dist = max(min_lookahead, max_lookahead - (angle_diff * 1.5))
+        if self.pth_i >= len(self.path.x) - 1:
+            control = carla.VehicleControl(throttle=0.0, steer=0.0, brake=1.0, reverse=True)
+            self.ego.apply_control(control)
+            print("Reached target")
+            return
 
+        curve_range = 4
+        future_idx = min(self.pth_i + curve_range, len(self.path.x) - 1)
 
+        # estimate path curve sharpness
+        dx_future = self.path.x[future_idx] - ego_loc.x
+        dy_future = self.path.y[future_idx] - ego_loc.y
+        future_heading = math.atan2(dy_future, dx_future)
+        angle_diff = abs(future_heading - reverse_yaw)
+        angle_diff = (angle_diff + math.pi) % (2 * math.pi) - math.pi
+        angle_diff = abs(angle_diff)
+
+        min_lookahead = 0.7
+        max_lookahead = 1.8
+
+        lookahead_dist = max(min_lookahead, max_lookahead - (angle_diff * 0.8)) # dynamic lookahead distance based on curve sharpness - angle_diff multiplier changes dropoff speed
         lookahead_i = self.lookahead_index(lookahead_dist)
 
         # find heading error (alpha) and normalize to [-pi, pi]
@@ -131,13 +147,12 @@ class Controller:
         dy = self.path.y[lookahead_i] - ego_loc.y
 
         # subtract math.pi from ego_yaw so the error angle alpha is calculated relative to the rear bumper
-        reverse_yaw = ego_yaw - math.pi
         alpha = math.atan2(dy, dx) - reverse_yaw
         alpha = (alpha + math.pi) % (2 * math.pi) - math.pi
         Ld = math.hypot(dx, dy) # lookahead distance
-        if Ld < 1e-6:
-            print("cannot divide by 0")
-            return
+
+        # minimum 0.5m lookahead distance
+        Ld = max(0.5, Ld)
 
         print(f"pth_i: {self.pth_i}")
         print(f"lookahed idx: {lookahead_i}")
