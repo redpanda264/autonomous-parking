@@ -44,6 +44,26 @@ def setup():
     except Exception as e:
         print(f"Failed to spawn ego vehicle: {e}")
 
+    # spawn vehicles to left and right of the target space (for testing)
+    parked_bp = blueprints.find("vehicle.audi.tt")
+    left_vehicle = world.try_spawn_actor(
+        parked_bp,
+        carla.Transform(
+            carla.Location(x=-13, y=-24.5, z=0.5),
+            carla.Rotation(yaw=180)
+        )
+    )
+
+    right_vehicle = world.try_spawn_actor(
+        parked_bp,
+        carla.Transform(
+            carla.Location(x=-13, y=-30, z=0.5),
+            carla.Rotation(yaw=180)
+        )
+    )
+
+    spawned_vehicles = [left_vehicle, right_vehicle]
+
 
     #world.wait_for_tick() # Wait for the world to spawn vehicle before teleporting, doesn't work otherwise.
     # Teleport spectator to a top-down position
@@ -62,4 +82,4 @@ def setup():
     # for actor in actors:
     #     print(f"Actor ID: {actor.id}, Type: {actor.type_id}, Location: {actor.get_location()}")
 
-    return client, world, ego, spectator
+    return client, world, ego, spectator, spawned_vehicles

@@ -6,7 +6,7 @@ from parking.controller import Controller
 def main():
     # call setup script and get necessary actor references
     try:
-        client, world, ego, spectator = setup()
+        client, world, ego, spectator, spawned_vehicles = setup()
     except Exception as e:
         print(f"Setup failed: {e}")
         return
@@ -35,6 +35,8 @@ def main():
     finally:
         # destroy actors, stop parking script
         ego.destroy()
+        for vehicle in spawned_vehicles:
+            vehicle.destroy()
         print("Actors destroyed")
 
 

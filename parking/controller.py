@@ -160,6 +160,10 @@ class Controller:
         
         kappa = 2 * math.sin(alpha) / Ld # curvature
 
+        # fix for wheels sharply turning at the end. set curvature to 0 for the last few waypoints
+        if (len(self.path.x) - self.pth_i) <= 3:
+            kappa = 0.0
+
         # kinematic bicycle model (convert curvature from pure pursuit to steering angle)
         delta = math.atan(self.wheelbase*kappa)
         steering_angle = delta / self.max_steer_angle
