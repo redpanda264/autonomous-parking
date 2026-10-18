@@ -20,11 +20,6 @@ class Controller:
         self.world = world
 
         # hard coded target location for parking spot
-        #self.target_tf = carla.Transform(
-        #    carla.Location(x=-13, y=-38.3, z=0.5),
-        #    carla.Rotation(yaw=0.0),
-        #)
-
         self.target_tf = carla.Transform(
             carla.Location(x=-13, y=-27.2, z=0.5),
             carla.Rotation(yaw=180),
@@ -52,18 +47,8 @@ class Controller:
         # TODO: Hard-coding wheelbase for now to calculate steering angle, this code is inconsistent. Change later.
         self.wheelbase = 1.571
 
-        # physics = self.ego.get_physics_control()
-        # wheels = physics.wheels
-
-        # front_x = (wheels[0].position.x + wheels[1].position.x) / 2
-        # rear_x = (wheels[2].position.x + wheels[3].position.x) / 2
-
-        # self.wheelbase = abs(front_x - rear_x)
-
-        # print(f"Wheelbase: {self.wheelbase:.3f} m")
 
         # use reeds-shepp curve, calculate once when in staging position
-
         physics = ego.get_physics_control()
 
 
@@ -102,6 +87,8 @@ class Controller:
 
         # path index
         self.pth_i = 0
+        self.pth_i = self.closest_nondecreasing_path_index()
+
 
         # diagnostic path values
         # print(f"Path X: {self.path.x}")
@@ -118,13 +105,6 @@ class Controller:
         # print("----------------------------------------------")
         # print(f"Path directions: {self.path.directions}")
 
-        # print("Staging:", ego_tf.location.x, ego_tf.location.y)
-        # print("Target:", self.target_tf.location.x, self.target_tf.location.y)
-        # print("staging yaw:", self.staging_tf.rotation.yaw)
-
-        # print("First waypoint:", path_x[0], path_y[0])
-        # print("Last waypoint:", path_x[-1], path_y[-1])
-
 
 
     def control(self):
@@ -135,31 +115,24 @@ class Controller:
         ego_loc = self.ego.get_transform().location
         ego_tf = self.ego.get_transform()
         ego_yaw = math.radians(ego_tf.rotation.yaw)
+        
+        self.pth_i = self.closest_nondecreasing_path_index()
+        #min_lookahead = 0.7
+        #max_lookahead = 1.5
+        lookahead_dist = 1.2
 
-        if math.dist((ego_loc.x, ego_loc.y), (self.path.x[self.pth_i], self.path.y[self.pth_i])) < 0.3:
-            # next waypoint
-            self.pth_i += 1
+        #lookahead_dist = max(min_lookahead, max_lookahead - (angle_diff * 1.5))
 
-        # if reached end of waypoints
-        if self.pth_i >= len(self.path.x):
-            print("Reached parking spot")
-            control = carla.VehicleControl(throttle=0.0, steer=0.0, brake=1.0)
-            self.ego.apply_control(control)
-            return
 
-        # control
-
-        lookAheadDist = 1.0 # hard-coded distance to look ahead point
-        lookAheadIdx = len(self.path.x) - 1
-        for i in range(self.pth_i, len(self.path.x)):
-            if math.dist((ego_loc.x, ego_loc.y), (self.path.x[i], self.path.y[i])) >= lookAheadDist:
-                lookAheadIdx = i
-                break
+        lookahead_i = self.lookahead_index(lookahead_dist)
 
         # find heading error (alpha) and normalize to [-pi, pi]
-        dx = self.path.x[lookAheadIdx] - ego_loc.x
-        dy = self.path.y[lookAheadIdx] - ego_loc.y
-        alpha = math.atan2(dy, dx) - ego_yaw
+        dx = self.path.x[lookahead_i] - ego_loc.x
+        dy = self.path.y[lookahead_i] - ego_loc.y
+
+        # subtract math.pi from ego_yaw so the error angle alpha is calculated relative to the rear bumper
+        reverse_yaw = ego_yaw - math.pi
+        alpha = math.atan2(dy, dx) - reverse_yaw
         alpha = (alpha + math.pi) % (2 * math.pi) - math.pi
         Ld = math.hypot(dx, dy) # lookahead distance
         if Ld < 1e-6:
@@ -167,7 +140,7 @@ class Controller:
             return
 
         print(f"pth_i: {self.pth_i}")
-        print(f"lookahed idx: {lookAheadIdx}")
+        print(f"lookahed idx: {lookahead_i}")
         print(f"lookahed dist: {Ld}")
         
         kappa = 2 * math.sin(alpha) / Ld # curvature
@@ -175,6 +148,7 @@ class Controller:
         # kinematic bicycle model (convert curvature from pure pursuit to steering angle)
         delta = math.atan(self.wheelbase*kappa)
         steering_angle = delta / self.max_steer_angle
+        steering_angle = -steering_angle
         steering_angle = max(-1, min(1, steering_angle))
 
         #reverse = seg_direction < 0
@@ -182,38 +156,34 @@ class Controller:
         self.ego.apply_control(control)
 
 
-        # TODO: move driving logic into another controller class
+    def closest_nondecreasing_path_index(self):
+        ego_loc = self.ego.get_transform().location
+        min_dist = math.inf
+        min_i = self.pth_i
 
-        # testing purposes
-        #self.ego.set_transform(self.staging_tf)
-        #self.ego.set_transform(self.target_tf)
+        for i in range(self.pth_i, len(self.path.x)):
+            cur_dist = math.dist((ego_loc.x, ego_loc.y), (self.path.x[i], self.path.y[i]))
+            if cur_dist <= min_dist:
+                min_dist = cur_dist
+                min_i = i
+            else:
+                # stop if distance starts increasing
+                break
 
-        # ego_tf = self.ego.get_transform() 
-
-        # relative_x, relative_y = self.get_relative_position()
-        # bearing = math.atan2(relative_y, relative_x)
-        # steer = max(-0.5, min(0.5, 1.0 * bearing)) # limit steering to [-0.5, 0.5]
-
-        # # testing
-        # desired_yaw = self.staging_tf.rotation.yaw
-        # current_yaw = ego_tf.rotation.yaw
-        # yaw_error = (desired_yaw - current_yaw + 180) % 360 - 180
-        # print(f"Heading error: {yaw_error:.1f} degrees")
-
-        # print(f"Relative distance to staging area: x={relative_x:.2f}, y={relative_y:.2f}")
-
-        # if relative_x > 0 and math.hypot(relative_x, relative_y) > 0.5:
-        #     # move forward
-        #     control = carla.VehicleControl(throttle=0.2, steer=steer, brake=0.0)
-
-        # else:
-        #     # stop
-        #     control = carla.VehicleControl(throttle=0.0, steer=0.0, brake=0.8)
-        #     print("Reached staging area, stopping vehicle.")
-
-        # self.ego.apply_control(control)
+        return min_i
 
 
+    def lookahead_index(self, lookahead_dist):
+        ego_loc = self.ego.get_transform().location
+
+        for i in range(self.pth_i, len(self.path.x)):
+            cur_dist = math.dist((ego_loc.x, ego_loc.y), (self.path.x[i], self.path.y[i]))
+
+            if cur_dist >= lookahead_dist:
+                return i
+
+        return len(self.path.x) - 1
+        
 
 
     def get_relative_position(self):
