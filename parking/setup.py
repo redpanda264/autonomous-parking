@@ -13,16 +13,24 @@ def setup():
         if not world.get_map().name.endswith("Town05"):
             world = client.load_world("Town05")
 
+            # only move spectator if it's in the default map location
+            world.wait_for_tick()
+            spectator = world.get_spectator()
+            spectator.set_transform(carla.Transform(
+                carla.Location(x=-13, y=-27.2, z=10),
+                carla.Rotation(yaw=90)
+            ))
+
         # clean up existing spawned actors
         else:
             print("Map already loaded")
+            spectator = world.get_spectator()
             existing_vehicles = world.get_actors().filter('vehicle.*')
 
             for vehicle in existing_vehicles:
                 if vehicle.attributes.get("role_name") == "hero":
                     print(f"Destroyed ego vehicle: {vehicle.id}")
 
-        spectator = world.get_spectator()
     except Exception as e:
         print(f"Error: {e}")
 
@@ -63,16 +71,6 @@ def setup():
     )
 
     spawned_vehicles = [left_vehicle, right_vehicle]
-
-
-    #world.wait_for_tick() # Wait for the world to spawn vehicle before teleporting, doesn't work otherwise.
-    # Teleport spectator to a top-down position
-    spectator.set_transform(
-        carla.Transform(
-            carla.Location(x=-13, y=-27.2, z=10),
-            carla.Rotation(yaw=90, pitch=0, roll=0)
-        )
-    )
 
     #print(f"Ego location: {ego.get_location()}")
     #print(f"Spectator location: {spectator.get_location()}")
