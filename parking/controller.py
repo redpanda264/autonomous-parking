@@ -1,5 +1,6 @@
 import carla
 import math
+import time
 from dataclasses import dataclass
 from parking.reeds_shepp_path_planning import reeds_shepp_path_planning
 
@@ -25,6 +26,21 @@ class Controller:
             carla.Rotation(yaw=180),
         )
 
+        # control parameters to perform correction if the vehicle is not aligned with the parking spot
+        self.final_alignment_distance = 1.0
+        self.position_tolerance = 0.2
+        self.heading_tolerance = math.radians(2.0)
+        self.parked = False
+        self.alignment_failed = False
+        self.correction_phase = None
+        self.correction_attempts = 0
+        self.max_correction_attempts = 3
+        self.correction_pull_forward = 1.5  # meters along the parking heading
+        self.correction_reverse = True
+        self.correction_started_at = None
+        target_yaw = math.radians(self.target_tf.rotation.yaw)
+        self.target_forward = (math.cos(target_yaw), math.sin(target_yaw))
+
         # assume car is aligned with the aisle
         self.aisle_rotation = carla.Rotation(yaw=90.0) # hard coded for now, should be calculated from aisle
 
@@ -47,7 +63,6 @@ class Controller:
         # TODO: Hard-coding wheelbase for now to calculate steering angle, this code is inconsistent. Change later.
         self.wheelbase = 1.571
 
-
         # use reeds-shepp curve, calculate once when in staging position
         physics = ego.get_physics_control()
 
@@ -59,21 +74,25 @@ class Controller:
                 break
 
 
-
-        ego_tf = ego.get_transform()
+        # ego transform will cause issue, will use staging transform instead for path planning
+        # ego_tf = ego.get_transform()
+        ego_tf = self.staging_tf
         min_turning_radius = 5.0 # meters
         max_curvature = 1.0 / min_turning_radius
 
         # Reeds-Shepp path algorithm from PythonRobotics
         path_x, path_y, path_yaw, path_curvetype, path_length, path_segment_idxs, path_directions = reeds_shepp_path_planning(
             ego_tf.location.x, ego_tf.location.y, math.radians(ego_tf.rotation.yaw),
-            self.target_tf.location.x, self.target_tf.location.y, math.radians(self.target_tf.rotation.yaw),
+            self.target_tf.location.x, self.target_tf.location.y, target_yaw,
             max_curvature, step_size=0.2
         )
 
         # error checking
         if path_x is None or path_y is None or path_yaw is None or path_curvetype is None or path_length is None or path_segment_idxs is None or path_directions is None:
             raise RuntimeError("Path planning failed")
+
+        if any(direction > 0 for direction in path_directions):
+            raise RuntimeError("This parking controller requires a reverse-only approach")
 
         self.path = SheppPath(
             x=path_x,
@@ -110,19 +129,45 @@ class Controller:
     def control(self):
 
         # pure pursuit control algorithm to follow path planning
+        if self.correction_phase is not None:
+            self.correct_alignment()
+            return
 
         # current ego vehicle location/yaw
-        ego_loc = self.ego.get_transform().location
         ego_tf = self.ego.get_transform()
+        ego_loc = ego_tf.location
         ego_yaw = math.radians(ego_tf.rotation.yaw)
         reverse_yaw = ego_yaw - math.pi
 
         self.pth_i = self.closest_nondecreasing_path_index()
 
-        if self.pth_i >= len(self.path.x) - 1:
+
+        # calculate distance to target and heading error
+        target_distance = math.hypot(
+            ego_loc.x - self.target_tf.location.x,
+            ego_loc.y - self.target_tf.location.y,
+        )
+
+        # calculate heading error relative to target yaw
+        target_yaw = math.radians(self.target_tf.rotation.yaw)
+        heading_error = (target_yaw - ego_yaw + math.pi) % (2 * math.pi) - math.pi
+        remaining = ((ego_loc.x - self.target_tf.location.x) * self.target_forward[0]
+                     + (ego_loc.y - self.target_tf.location.y) * self.target_forward[1])
+        on_final_approach = (target_distance <= self.final_alignment_distance
+                             and self.pth_i >= len(self.path.x) - 7)
+        aligned = (target_distance <= self.position_tolerance
+                   and abs(heading_error) <= self.heading_tolerance)
+        passed_target = on_final_approach and remaining <= 0.0
+
+        if self.parked or self.alignment_failed:
             control = carla.VehicleControl(throttle=0.0, steer=0.0, brake=1.0, reverse=True)
             self.ego.apply_control(control)
-            print("Reached target")
+            return
+        if aligned or passed_target:
+            # Stop first, then verify the pose or begin a physical correction.
+            self.correction_phase = "verify" if aligned else "brake_forward"
+            self.correction_started_at = time.monotonic()
+            self.correct_alignment()
             return
 
         curve_range = 4
@@ -145,8 +190,15 @@ class Controller:
         # find heading error (alpha) and normalize to [-pi, pi]
         dx = self.path.x[lookahead_i] - ego_loc.x
         dy = self.path.y[lookahead_i] - ego_loc.y
+        if on_final_approach:
+            # Extend the straight reference beyond the endpoint so heading can
+            # still converge when less than a lookahead distance remains.
+            lookahead_dist = 0.7
+            reference_distance = remaining - lookahead_dist
+            dx = self.target_tf.location.x + reference_distance * self.target_forward[0] - ego_loc.x
+            dy = self.target_tf.location.y + reference_distance * self.target_forward[1] - ego_loc.y
 
-        # subtract math.pi from ego_yaw so the error angle alpha is calculated relative to the rear bumper
+        # Calculate the pursuit angle relative to the reverse travel direction.
         alpha = math.atan2(dy, dx) - reverse_yaw
         alpha = (alpha + math.pi) % (2 * math.pi) - math.pi
         Ld = math.hypot(dx, dy) # lookahead distance
@@ -157,12 +209,8 @@ class Controller:
         print(f"pth_i: {self.pth_i}")
         print(f"lookahed idx: {lookahead_i}")
         print(f"lookahed dist: {Ld}")
-        
-        kappa = 2 * math.sin(alpha) / Ld # curvature
 
-        # fix for wheels sharply turning at the end. set curvature to 0 for the last few waypoints
-        if (len(self.path.x) - self.pth_i) <= 3:
-            kappa = 0.0
+        kappa = 2 * math.sin(alpha) / Ld # curvature
 
         # kinematic bicycle model (convert curvature from pure pursuit to steering angle)
         delta = math.atan(self.wheelbase*kappa)
@@ -171,8 +219,104 @@ class Controller:
         steering_angle = max(-1, min(1, steering_angle))
 
         #reverse = seg_direction < 0
-        control = carla.VehicleControl(throttle=0.2, steer=steering_angle, brake=0.0, reverse=True)
+        velocity = self.ego.get_velocity()
+        speed = math.sqrt(velocity.x ** 2 + velocity.y ** 2 + velocity.z ** 2)
+        throttle, brake = 0.2, 0.0
+        if target_distance < 1.5:
+            desired_speed = min(0.45, max(0.22, target_distance * 0.4))
+            speed_error = desired_speed - speed
+            throttle = min(0.2, max(0.0, speed_error * 0.5))
+            brake = min(0.5, max(0.0, -speed_error * 0.5))
+        control = carla.VehicleControl(throttle=throttle, steer=steering_angle, brake=brake, reverse=True)
         self.ego.apply_control(control)
+
+    # NEW METHOD: Correct the vehicle's alignment with the parking spot
+    def correct_alignment(self):
+        """Pull forward along the spot centerline, stop, then reverse into it."""
+        tf = self.ego.get_transform()
+        dx = tf.location.x - self.target_tf.location.x
+        dy = tf.location.y - self.target_tf.location.y
+        fx, fy = self.target_forward
+        along = dx * fx + dy * fy
+        lateral = -dx * fy + dy * fx
+        target_yaw = math.radians(self.target_tf.rotation.yaw)
+        heading_error = (math.radians(tf.rotation.yaw) - target_yaw + math.pi) % (2 * math.pi) - math.pi
+        velocity = self.ego.get_velocity()
+        speed = math.sqrt(velocity.x ** 2 + velocity.y ** 2 + velocity.z ** 2)
+        aligned = (math.hypot(dx, dy) <= self.position_tolerance
+                   and abs(heading_error) <= self.heading_tolerance)
+
+        def brake():
+            self.ego.apply_control(carla.VehicleControl(
+                throttle=0.0, steer=0.0, brake=1.0, reverse=self.correction_reverse))
+
+        # Keep this a small parking adjustment, with bounded retries and time.
+        if (abs(lateral) > 0.7 or abs(along) > 3.0
+                or abs(heading_error) > math.radians(45.0)
+                or time.monotonic() - self.correction_started_at > 90.0):
+            brake()
+            self.alignment_failed = True
+            self.correction_phase = None
+            print("Alignment correction stopped: maneuver limit exceeded")
+            return
+
+        if self.correction_phase == "verify":
+            brake()
+            if speed > 0.03:
+                return
+            if aligned:
+                self.parked = True
+                self.correction_phase = None
+                print("Reached target with parking alignment")
+            else:
+                self.correction_phase = "brake_forward"
+            return
+
+        if self.correction_phase in ("brake_forward", "brake_reverse"):
+            brake()
+            if speed > 0.03:
+                return
+            if self.correction_phase == "brake_forward":
+                if self.correction_attempts >= self.max_correction_attempts:
+                    self.alignment_failed = True
+                    self.correction_phase = None
+                    print("Alignment correction stopped: retry limit reached")
+                    return
+                self.correction_attempts += 1
+                self.correction_end_x = max(self.correction_pull_forward, along + 1.0)
+                self.correction_phase = "forward"
+                self.correction_reverse = False
+                print(f"Alignment correction {self.correction_attempts}: pull forward "
+                      f"(heading error={math.degrees(heading_error):.1f} deg)")
+            else:
+                self.correction_phase = "reverse"
+                self.correction_reverse = True
+                print("Alignment correction: reverse into spot")
+            return
+
+        reverse = self.correction_phase == "reverse"
+        if not reverse and along >= self.correction_end_x:
+            self.correction_phase = "brake_reverse"
+            brake()
+            return
+        if reverse and (aligned or along <= 0.0):
+            self.correction_phase = "verify"
+            brake()
+            return
+
+        direction = -1.0 if reverse else 1.0
+        # Direction-aware heading and lateral feedback stabilizes the same
+        # centerline in either gear; do not apply the pursuit reverse sign here.
+        curvature = -1.0 * lateral - direction * 2.5 * heading_error
+        steer = math.atan(self.wheelbase * curvature) / self.max_steer_angle
+        steer = max(-0.5, min(0.5, steer))
+        distance_left = max(0.0, along if reverse else self.correction_end_x - along)
+        desired_speed = min(0.4, max(0.18, distance_left * 0.5))
+        speed_error = desired_speed - speed
+        self.ego.apply_control(carla.VehicleControl(
+            throttle=min(0.2, max(0.0, speed_error * 0.5)),
+            steer=steer, brake=min(0.5, max(0.0, -speed_error * 0.5)),
+            reverse=reverse))
 
 
     def closest_nondecreasing_path_index(self):
@@ -202,18 +346,18 @@ class Controller:
                 return i
 
         return len(self.path.x) - 1
-        
+
 
 
     def get_relative_position(self):
         ego_tf = self.ego.get_transform()
         ego_loc = ego_tf.location
         staging_loc = self.staging_tf.location
-        
+
         dx = staging_loc.x - ego_loc.x
         dy = staging_loc.y - ego_loc.y
         dz = staging_loc.z - ego_loc.z
-        
+
         # use ego vectors to find relative distance
         forward = ego_tf.get_forward_vector()
         right = ego_tf.get_right_vector()

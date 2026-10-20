@@ -1,8 +1,14 @@
 import carla
 import time
 
+if __package__:
+    from .connection_config import load_connection_config
+else:
+    from connection_config import load_connection_config
+
 try:
-    client = carla.Client('host.docker.internal', 2000)
+    host, port = load_connection_config()
+    client = carla.Client(host, port)
     client.set_timeout(10.0)
     
     # Load Town04 which has the square parking lot layout

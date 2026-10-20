@@ -33,6 +33,12 @@ vehicle_gallery.py
 vehicle_physics.py
 visualize_multiple_sensors.py
 
+# Machine-specific CARLA connection settings
+/config.local.json
+
+# Local tests
+/tests/
+
 # Python cache
 __pycache__/
 *.pyc

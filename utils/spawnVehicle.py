@@ -1,8 +1,14 @@
 import carla
 import random
 
+if __package__:
+    from .connection_config import load_connection_config
+else:
+    from connection_config import load_connection_config
+
 # 1. Connect to CARLA
-client = carla.Client('localhost', 2000)
+host, port = load_connection_config()
+client = carla.Client(host, port)
 client.set_timeout(10.0)
 
 # 2. Get the current world

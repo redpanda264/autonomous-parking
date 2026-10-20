@@ -1,11 +1,13 @@
 import carla
 import time
+from utils.connection_config import load_connection_config
 
 
 def setup():
     # world setup
     try:
-        client = carla.Client("host.docker.internal", 2000)
+        host, port = load_connection_config()
+        client = carla.Client(host, port)
         client.set_timeout(10.0)
         world = client.get_world()
 
@@ -24,11 +26,17 @@ def setup():
         # clean up existing spawned actors
         else:
             print("Map already loaded")
+            world.wait_for_tick()
             spectator = world.get_spectator()
             existing_vehicles = world.get_actors().filter('vehicle.*')
+            # spectator.set_transform(carla.Transform(
+            #     carla.Location(x=-13, y=-27.2, z=10),
+            #     carla.Rotation(yaw=90)
+            # ))
 
             for vehicle in existing_vehicles:
                 if vehicle.attributes.get("role_name") == "hero":
+                    vehicle.destroy()
                     print(f"Destroyed ego vehicle: {vehicle.id}")
 
     except Exception as e:

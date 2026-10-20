@@ -1,6 +1,12 @@
 import carla
 
-client = carla.Client('localhost', 2000)
+if __package__:
+    from .connection_config import load_connection_config
+else:
+    from connection_config import load_connection_config
+
+host, port = load_connection_config()
+client = carla.Client(host, port)
 client.set_timeout(10.0)
 world = client.get_world()
 vehicles = world.get_actors().filter('vehicle.*')
