@@ -57,7 +57,7 @@ All custom scripts in `parking/setup.py` and `utils` use the same connection
 configuration. The original CARLA examples in `examples/` retain their own options.
 
 After downloading CARLA, you should find examples folder under ROOT\CARLA\PythonAPI\examples.\
-This examples folder contains some python scripts we can play around.
+This examples folder contains some python scripts we can play around with.
 <img width="849" height="688" alt="explorer_CRC8oJmcj9" src="https://github.com/user-attachments/assets/6931512f-9d07-4670-a75a-367d39523d41" />
 
 We're running a conda environment called whatever under examples folder by using Anaconda Prompt.
