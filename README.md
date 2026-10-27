@@ -6,6 +6,8 @@ This project uses CARLA to simulate an autonomous parking system.
 - Python
 - CARLA Python API
 - Path Planning: The core Reeds-Shepp geometric formula used in this project is adapted from the open-source PythonRobotics repository by Atsushi Sakai. Licensed under the MIT License.
+- Docker: If there are issues running Carla on the machine, docker can be used to run the CARLA client. The project supports this setup change easily by modifying the
+config.local.json file to set "carla_host": "host.docker.internal"
 
 ## Workflow
 ### Configure the CARLA connection (once per machine)
