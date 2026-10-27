@@ -61,24 +61,25 @@ def setup():
         print(f"Failed to spawn ego vehicle: {e}")
 
     # spawn vehicles to left and right of the target space (for testing)
-    parked_bp = blueprints.find("vehicle.audi.tt")
-    left_vehicle = world.try_spawn_actor(
-        parked_bp,
-        carla.Transform(
-            carla.Location(x=-13, y=-24.5, z=0.5),
-            carla.Rotation(yaw=180)
-        )
-    )
+    # parked_bp = blueprints.find("vehicle.audi.tt")
+    # left_vehicle = world.try_spawn_actor(
+    #     parked_bp,
+    #     carla.Transform(
+    #         carla.Location(x=-13, y=-24.5, z=0.5),
+    #         carla.Rotation(yaw=180)
+    #     )
+    # )
 
-    right_vehicle = world.try_spawn_actor(
-        parked_bp,
-        carla.Transform(
-            carla.Location(x=-13, y=-30, z=0.5),
-            carla.Rotation(yaw=180)
-        )
-    )
+    # right_vehicle = world.try_spawn_actor(
+    #     parked_bp,
+    #     carla.Transform(
+    #         carla.Location(x=-13, y=-30, z=0.5),
+    #         carla.Rotation(yaw=180)
+    #     )
+    # )
 
-    spawned_vehicles = [left_vehicle, right_vehicle]
+    #spawned_vehicles = [left_vehicle, right_vehicle]
+    spawned_vehicles = []
 
     #print(f"Ego location: {ego.get_location()}")
     #print(f"Spectator location: {spectator.get_location()}")

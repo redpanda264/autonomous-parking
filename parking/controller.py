@@ -20,10 +20,25 @@ class Controller:
         self.ego = ego
         self.world = world
 
+        # x: + left, - right
+        # y: + up, - down
+
         # hard coded target location for parking spot
+        # self.target_tf = carla.Transform(
+        #     carla.Location(x=-13, y=-27.2, z=0.5),
+        #     carla.Rotation(yaw=180),
+        # )
+
+        #different spot
+        # self.target_tf = carla.Transform(
+        #     carla.Location(x=-13, y=-35.5, z=0.5),
+        #     carla.Rotation(yaw=180),
+        # )
+
+        #spot on right side
         self.target_tf = carla.Transform(
-            carla.Location(x=-13, y=-27.2, z=0.5),
-            carla.Rotation(yaw=180),
+            carla.Location(x=-23, y=-38.3, z=0.5),
+            carla.Rotation(yaw=0),
         )
 
         # control parameters to perform correction if the vehicle is not aligned with the parking spot
@@ -44,9 +59,14 @@ class Controller:
         # assume car is aligned with the aisle
         self.aisle_rotation = carla.Rotation(yaw=90.0) # hard coded for now, should be calculated from aisle
 
-        # move the rotated target transform right and backwards
+        # move the rotated target transform right and backwards (spot to left)
+        # staging_loc = self.target_tf.transform(
+        #     carla.Location(x=5.0, y=-5.0, z=0.0)
+        # )
+
+        #(spot to right)
         staging_loc = self.target_tf.transform(
-            carla.Location(x=5.0, y=-5.0, z=0.0)
+            carla.Location(x=5.0, y=5.0, z=0.0)
         )
 
         # final staging transform

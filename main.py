@@ -40,6 +40,6 @@ def main():
         print("Actors destroyed")
 
 
-# run main loop when file is executed directly
+# run main loop when file is executed directlya
 if __name__ == "__main__":
     main()
