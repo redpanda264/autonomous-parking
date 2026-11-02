@@ -170,7 +170,7 @@ class Controller:
 
         # calculate heading error relative to target yaw
         target_yaw = math.radians(self.target_tf.rotation.yaw)
-        heading_error = (target_yaw - ego_yaw + math.pi) % (2 * math.pi) - math.pi
+        heading_error =     (target_yaw - ego_yaw + math.pi) % (2 * math.pi) - math.pi
         remaining = ((ego_loc.x - self.target_tf.location.x) * self.target_forward[0]
                      + (ego_loc.y - self.target_tf.location.y) * self.target_forward[1])
         on_final_approach = (target_distance <= self.final_alignment_distance
