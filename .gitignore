@@ -60,3 +60,4 @@ venv/
 
 # Windows
 Thumbs.db
+config.example.json

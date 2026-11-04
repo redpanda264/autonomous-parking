@@ -3,7 +3,7 @@ import math
 import time
 from dataclasses import dataclass
 from parking import a_star
-from controller import closest_nondecreasing_path_index
+from parking import controller
 
 # dataclass to hold path data
 @dataclass
@@ -54,7 +54,7 @@ class NavigationController:
 
         # path index
         self.pth_i = 0
-        self.pth_i = self.closest_nondecreasing_path_index()
+        self.pth_i = ParkingController.closest_nondecreasing_path_index()
 
 
     def control(self):
