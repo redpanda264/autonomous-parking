@@ -37,7 +37,7 @@ class NavigationController:
 
         #TODO: change these variables to the actual values
         resolution = 0.5  # grid resolution in meters
-        robot_radius = 1.0  # robot radius in meters
+        robot_radius = 1.4  # robot radius in meters
         obstacle_x = [0, 10, 20]  # x coordinates of obstacles
         obstacle_y = [0, 10, 20]  # y coordinates of obstacles
 
@@ -55,7 +55,6 @@ class NavigationController:
         # path index
         self.pth_i = 0
         self.pth_i = ParkingController.closest_nondecreasing_path_index()
-
 
     def control(self):
         return

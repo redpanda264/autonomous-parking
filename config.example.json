@@ -1,4 +1,4 @@
 {
   "carla_host": "localhost",
-  "carla_port": 2000
+  "carla_port": 3000
 }
