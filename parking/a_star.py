@@ -175,6 +175,7 @@ def sample_box(cx, cy, ex, ey, yaw, step):
     
     return wx, wy
 
+@staticmethod
 def corners_to_rectangle(corner1, corner2, yaw=0.0):
     """
     Given two corners (x, y) of a rectangle, output an iterable (x, y, width, height, yaw)
@@ -186,6 +187,7 @@ def corners_to_rectangle(corner1, corner2, yaw=0.0):
     (x1, y1), (x2, y2) = corner1, corner2
     return (x1 + x2) / 2.0, (y1 + y2) / 2.0, abs(x2 - x1), abs(y2 - y1), yaw
 
+@staticmethod
 def rectangles_to_points(rects, step=0.5):
     """
     rects = iterable of multiple (x, y, width, height)s
@@ -197,7 +199,8 @@ def rectangles_to_points(rects, step=0.5):
         oy += wy.tolist()
     return ox, oy
 
-# test function !
+"""
+# test function !, basically ported this over to navigation_controller actually lol
 def main():
     print(__file__ + " start!!")
 
@@ -209,9 +212,9 @@ def main():
 
     # example state of the lot
     parking_spots = (
-        corners_to_rectangle((0.0,-14.0),(13.0,-46.5)),
-        corners_to_rectangle((-15.5,-14.0),(-2.5,-46.5)),
-        corners_to_rectangle((-31.0,-14.0),(-18.5,-46.5)))
+        AStarPlanner.corners_to_rectangle((0.0,-14.0),(13.0,-46.5)),
+        AStarPlanner.corners_to_rectangle((-15.5,-14.0),(-2.5,-46.5)),
+        AStarPlanner.corners_to_rectangle((-31.0,-14.0),(-18.5,-46.5)))
     bounds = (-37, 17, -48, -11)
 
     # state of the map
@@ -230,3 +233,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+"""
