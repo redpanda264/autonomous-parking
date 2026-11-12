@@ -4,6 +4,7 @@ import time
 from dataclasses import dataclass
 from parking import a_star
 from parking import controller
+from utils.path_utils import closest_nondecreasing_path_index, lookahead_index
 
 # dataclass to hold path data
 @dataclass
@@ -11,6 +12,8 @@ class AStarPath:
     x: list[float]
     y: list[float]
 
+
+# TODO: fix start inside obstacle/outside region error
 
 class NavigationController:
     def __init__(self, ego, world):
@@ -67,8 +70,8 @@ class NavigationController:
         )
 
         if (pathx and pathy):
-            print("xs:", [round(x, 2) for x in rx])
-            print("ys:", [round(y, 2) for y in ry])
+            print("xs:", [round(x, 2) for x in pathx]) # changed from rx since it wasn't defined. not sure if that's correct
+            print("ys:", [round(y, 2) for y in pathy]) # ry
 
         self.path = AStarPath(
             x=pathx,
@@ -77,8 +80,107 @@ class NavigationController:
 
         # path index
         self.pth_i = 0
-        #self.pth_i = controller.closest_nondecreasing_path_index()
+        self.pth_i = closest_nondecreasing_path_index(self)
 
+    # pure pursuit
     def control(self):
-        return
+
+        # current ego vehicle location/yaw
+        ego_tf = self.ego.get_transform()
+        ego_loc = ego_tf.location
+        ego_yaw = math.radians(ego_tf.rotation.yaw)
+        reverse_yaw = ego_yaw - math.pi
+
+        self.pth_i = closest_nondecreasing_path_index(self)
+
+
+        # calculate distance to target and heading error
+        target_distance = math.hypot(
+            ego_loc.x - self.target_tf.location.x,
+            ego_loc.y - self.target_tf.location.y,
+        )
+
+        # calculate heading error relative to target yaw
+        target_yaw = math.radians(self.target_tf.rotation.yaw)
+        heading_error =     (target_yaw - ego_yaw + math.pi) % (2 * math.pi) - math.pi
+        remaining = ((ego_loc.x - self.target_tf.location.x) * self.target_forward[0]
+                        + (ego_loc.y - self.target_tf.location.y) * self.target_forward[1])
+        on_final_approach = (target_distance <= self.final_alignment_distance
+                                and self.pth_i >= len(self.path.x) - 7)
+        aligned = (target_distance <= self.position_tolerance
+                    and abs(heading_error) <= self.heading_tolerance)
+        passed_target = on_final_approach and remaining <= 0.0
+
+        if self.parked or self.alignment_failed:
+            control = carla.VehicleControl(throttle=0.0, steer=0.0, brake=1.0, reverse=True)
+            self.ego.apply_control(control)
+            return
+        if aligned or passed_target:
+            # Stop first, then verify the pose or begin a physical correction.
+            self.correction_phase = "verify" if aligned else "brake_forward"
+            self.correction_started_at = time.monotonic()
+            self.correct_alignment()
+            return
+
+        curve_range = 4
+        future_idx = min(self.pth_i + curve_range, len(self.path.x) - 1)
+
+        # estimate path curve sharpness
+        dx_future = self.path.x[future_idx] - ego_loc.x
+        dy_future = self.path.y[future_idx] - ego_loc.y
+        future_heading = math.atan2(dy_future, dx_future)
+        angle_diff = abs(future_heading - reverse_yaw)
+        angle_diff = (angle_diff + math.pi) % (2 * math.pi) - math.pi
+        angle_diff = abs(angle_diff)
+
+        min_lookahead = 0.7
+        max_lookahead = 1.8
+
+        lookahead_dist = max(min_lookahead, max_lookahead - (angle_diff * 0.8)) # dynamic lookahead distance based on curve sharpness - angle_diff multiplier changes dropoff speed
+        lookahead_i = lookahead_index(self, lookahead_dist)
+
+        # find heading error (alpha) and normalize to [-pi, pi]
+        dx = self.path.x[lookahead_i] - ego_loc.x
+        dy = self.path.y[lookahead_i] - ego_loc.y
+        if on_final_approach:
+            # Extend the straight reference beyond the endpoint so heading can
+            # still converge when less than a lookahead distance remains.
+            lookahead_dist = 0.7
+            reference_distance = remaining - lookahead_dist
+            dx = self.target_tf.location.x + reference_distance * self.target_forward[0] - ego_loc.x
+            dy = self.target_tf.location.y + reference_distance * self.target_forward[1] - ego_loc.y
+
+        # Calculate the pursuit angle relative to the reverse travel direction.
+        alpha = math.atan2(dy, dx) - reverse_yaw
+        alpha = (alpha + math.pi) % (2 * math.pi) - math.pi
+        Ld = math.hypot(dx, dy) # lookahead distance
+
+        # minimum 0.5m lookahead distance
+        Ld = max(0.5, Ld)
+
+        print(f"pth_i: {self.pth_i}")
+        print(f"lookahed idx: {lookahead_i}")
+        print(f"lookahed dist: {Ld}")
+
+        kappa = 2 * math.sin(alpha) / Ld # curvature
+
+        # kinematic bicycle model (convert curvature from pure pursuit to steering angle)
+        delta = math.atan(self.wheelbase*kappa)
+        steering_angle = delta / self.max_steer_angle
+        steering_angle = -steering_angle
+        steering_angle = max(-1, min(1, steering_angle))
+
+        #reverse = seg_direction < 0
+        velocity = self.ego.get_velocity()
+        speed = math.sqrt(velocity.x ** 2 + velocity.y ** 2 + velocity.z ** 2)
+        throttle, brake = 0.2, 0.0
+        if target_distance < 1.5:
+            desired_speed = min(0.45, max(0.22, target_distance * 0.4))
+            speed_error = desired_speed - speed
+            throttle = min(0.2, max(0.0, speed_error * 0.5))
+            brake = min(0.5, max(0.0, -speed_error * 0.5))
+        control = carla.VehicleControl(throttle=throttle, steer=steering_angle, brake=brake, reverse=True)
+        self.ego.apply_control(control)
+
+    
     

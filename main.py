@@ -28,7 +28,8 @@ def main():
         for vehicle in spawned_vehicles:
             vehicle.destroy()
         print("Actors destroyed")
-    
+
+    # once navigation is complete, transition to precise parking controller
     
     parking_controller = Controller(ego, world)
     # parking logic loop
@@ -48,6 +49,6 @@ def main():
         print("Actors destroyed")
 
 
-# run main loop when file is executed directlya
+# run main loop when file is executed directly
 if __name__ == "__main__":
     main()

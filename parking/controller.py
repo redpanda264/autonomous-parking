@@ -3,6 +3,7 @@ import math
 import time
 from dataclasses import dataclass
 from parking.reeds_shepp_path_planning import reeds_shepp_path_planning
+from utils.path_utils import closest_nondecreasing_path_index, lookahead_index
 
 # dataclass to hold path data
 @dataclass
@@ -126,7 +127,7 @@ class Controller:
 
         # path index
         self.pth_i = 0
-        self.pth_i = self.closest_nondecreasing_path_index()
+        self.pth_i = closest_nondecreasing_path_index(self)
 
 
         # diagnostic path values
@@ -159,7 +160,7 @@ class Controller:
         ego_yaw = math.radians(ego_tf.rotation.yaw)
         reverse_yaw = ego_yaw - math.pi
 
-        self.pth_i = self.closest_nondecreasing_path_index()
+        self.pth_i = closest_nondecreasing_path_index(self)
 
 
         # calculate distance to target and heading error
@@ -205,7 +206,7 @@ class Controller:
         max_lookahead = 1.8
 
         lookahead_dist = max(min_lookahead, max_lookahead - (angle_diff * 0.8)) # dynamic lookahead distance based on curve sharpness - angle_diff multiplier changes dropoff speed
-        lookahead_i = self.lookahead_index(lookahead_dist)
+        lookahead_i = lookahead_index(self, lookahead_dist)
 
         # find heading error (alpha) and normalize to [-pi, pi]
         dx = self.path.x[lookahead_i] - ego_loc.x
@@ -249,6 +250,17 @@ class Controller:
             brake = min(0.5, max(0.0, -speed_error * 0.5))
         control = carla.VehicleControl(throttle=throttle, steer=steering_angle, brake=brake, reverse=True)
         self.ego.apply_control(control)
+
+
+
+
+
+
+
+
+    
+    #TODO: remove unused methods below, refactor.
+
 
     # NEW METHOD: Correct the vehicle's alignment with the parking spot
     def correct_alignment(self):
@@ -337,35 +349,6 @@ class Controller:
             throttle=min(0.2, max(0.0, speed_error * 0.5)),
             steer=steer, brake=min(0.5, max(0.0, -speed_error * 0.5)),
             reverse=reverse))
-
-
-    def closest_nondecreasing_path_index(self):
-        ego_loc = self.ego.get_transform().location
-        min_dist = math.inf
-        min_i = self.pth_i
-
-        for i in range(self.pth_i, len(self.path.x)):
-            cur_dist = math.dist((ego_loc.x, ego_loc.y), (self.path.x[i], self.path.y[i]))
-            if cur_dist <= min_dist:
-                min_dist = cur_dist
-                min_i = i
-            else:
-                # stop if distance starts increasing
-                break
-
-        return min_i
-
-
-    def lookahead_index(self, lookahead_dist):
-        ego_loc = self.ego.get_transform().location
-
-        for i in range(self.pth_i, len(self.path.x)):
-            cur_dist = math.dist((ego_loc.x, ego_loc.y), (self.path.x[i], self.path.y[i]))
-
-            if cur_dist >= lookahead_dist:
-                return i
-
-        return len(self.path.x) - 1
 
 
 
