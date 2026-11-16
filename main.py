@@ -12,6 +12,7 @@ def main():
         print(f"Setup failed: {e}")
         return
 
+    world.wait_for_tick()
     navigation_controller = NavigationController(ego, world)
     # navigation logic loop
     try:

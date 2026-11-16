@@ -22,21 +22,25 @@ class NavigationController:
 
         self.aisle_rotation = carla.Rotation(yaw=90.0) # evil line that is suddenly required - rotation of the aisle where goal parking spot is located
 
-        #TODO: change this to a goal parking spot that is not occupied
-        self.target_tf = carla.Transform(
-            carla.Location(x=-23, y=-38.3, z=0.5),
+        #TODO: fix this to an actual parking spot 
+        self.target_tf = carla.Transform( # THIS IS THE PARKING SPOT
+            carla.Location(x=-35.5, y=-34.1, z=0.5), # TODO: find what the original values of these were
             carla.Rotation(yaw=0),
         )
 
-        staging_loc = self.target_tf.transform(
-            carla.Location(x=5.0, y=5.0, z=0.0)
+        staging_loc = carla.Transform( # THIS IS THE STAGING LOCATION <-- why was this previously local
+            carla.Location(x=-35.5, y=-32.0, z=0.0), # original values set to 5.0, 5.0
+            carla.Rotation(yaw=90.0)
         )
 
         # final staging transform
+        '''
         self.staging_tf = carla.Transform(
             staging_loc,
             self.aisle_rotation
         )
+        '''
+        self.staging_tf = staging_loc
 
         start_tf = self.ego.get_transform()
 
@@ -64,6 +68,11 @@ class NavigationController:
         #A* execution
         astar_planner = a_star.AStarPlanner(obstacle_x, obstacle_y, resolution, robot_radius, bounds)
 
+        world.wait_for_tick() # THIS WAS IT THE WHOLE TIME AHHHHHHHHHHHHH
+
+        print("start: (" + str(start_tf.location.x) + ", " + str(start_tf.location.y) + ")")
+        print("goal: (" + str(self.staging_tf.location.x) + ", " +  str(self.staging_tf.location.y) + ")")
+
         pathx, pathy = astar_planner.planning(
             start_tf.location.x, start_tf.location.y,
             self.staging_tf.location.x, self.staging_tf.location.y
@@ -71,7 +80,7 @@ class NavigationController:
 
         if (pathx and pathy):
             print("xs:", [round(x, 2) for x in pathx]) # changed from rx since it wasn't defined. not sure if that's correct
-            print("ys:", [round(y, 2) for y in pathy]) # ry
+            print("ys:", [round(y, 2) for y in pathy]) # ry o ty
 
         self.path = AStarPath(
             x=pathx,
@@ -80,7 +89,7 @@ class NavigationController:
 
         # path index
         self.pth_i = 0
-        self.pth_i = closest_nondecreasing_path_index(self)
+        #self.pth_i = closest_nondecreasing_path_index(self)
 
     # pure pursuit
     def control(self):

@@ -94,13 +94,20 @@ class AStarPlanner:
         """
         start, goal = self.to_index(sx, sy), self.to_index(gx, gy)
 
-        # safetys
-        if self.blocked(start):
-            print("start is inside an obstacle or outside the region")
-            return None, None
-        if self.blocked(goal):
-            print("goal is inside an obstacle or outside the region")
-            return None, None
+        # safety
+        for name, (px, py), node in (("start", (sx, sy), start), ("goal", (gx, gy), goal)):
+            if self.blocked(node):
+                ix, iy = node
+                b = ""
+                if not (0 <= ix < self.x_width and 0 <= iy < self.y_width):
+                    b = f"outside bounds x[{self.min_x}, {self.max_x}] y[{self.min_y}, {self.max_y}]"
+                elif self.obstacle_map[ix, iy]:
+                    wx, wy = self.to_world(ix, iy)
+                    b = print(f"inside an obstacle or robot radius {self.rr} m inflation (cell center {wx:.2f}, {wy:.2f}")
+                
+                a = f"{name} {(px, py)} exploded bc"
+                print(f"{a} {b}")
+                return (None, None)
  
         def h(n):
             return math.hypot(n[0] - goal[0], n[1] - goal[1]) * self.resolution
