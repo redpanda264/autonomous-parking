@@ -17,20 +17,17 @@ def main():
     # navigation logic loop
     try:
         while True:
-            navigation_controller.control()
-            world.wait_for_tick()
-            
+            if(navigation_controller.control()):
+                break # transition to parking controller
+            world.wait_for_tick()   
     except KeyboardInterrupt:
         print("Stopping...")
-
-    finally:
         # destroy actors, stop navigation script
         ego.destroy()
         for vehicle in spawned_vehicles:
             vehicle.destroy()
         print("Actors destroyed")
-
-    # once navigation is complete, transition to precise parking controller
+    
     
     parking_controller = Controller(ego, world)
     # parking logic loop
@@ -38,11 +35,8 @@ def main():
         while True:
             parking_controller.control()
             world.wait_for_tick()
-            
     except KeyboardInterrupt:
         print("Stopping...")
-
-    finally:
         # destroy actors, stop parking script
         ego.destroy()
         for vehicle in spawned_vehicles:

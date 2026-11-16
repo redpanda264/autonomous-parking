@@ -36,9 +36,10 @@ class Controller:
         #     carla.Rotation(yaw=180),
         # )
 
-        #spot on right side
-        self.target_tf = carla.Transform(
-            carla.Location(x=-23, y=-38.3, z=0.5),
+        #parking spot
+        #TODO: FIX THIS. this is not a parking spot
+        self.target_tf = carla.Transform( # THIS IS THE PARKING SPOT
+            carla.Location(x=-35.5, y=-34.1, z=0.5),
             carla.Rotation(yaw=0),
         )
 
@@ -61,24 +62,20 @@ class Controller:
         self.aisle_rotation = carla.Rotation(yaw=90.0) # hard coded for now, should be calculated from aisle
 
         # move the rotated target transform right and backwards (spot to left)
-        # staging_loc = self.target_tf.transform(
-        #     carla.Location(x=5.0, y=-5.0, z=0.0)
-        # )
+        staging_loc = self.target_tf.transform(
+            carla.Location(x=5.0, y=-5.0, z=0.0)
+        )
 
         #(spot to right)
-        staging_loc = self.target_tf.transform(
-            carla.Location(x=5.0, y=5.0, z=0.0)
-        )
+        # staging_loc = self.target_tf.transform(
+        #     carla.Location(x=5.0, y=5.0, z=0.0)
+        # )
 
         # final staging transform
         self.staging_tf = carla.Transform(
             staging_loc,
             self.aisle_rotation
         )
-
-        # spawn ego at the staging position for testing
-        ego.set_transform(self.staging_tf)
-        world.wait_for_tick()
 
 
         # TODO: Hard-coding wheelbase for now to calculate steering angle, this code is inconsistent. Change later.
@@ -94,10 +91,12 @@ class Controller:
                 self.max_steer_angle = math.radians(wheel.max_steer_angle)
                 break
 
+        #TODO: teleport ego, since it's not working. debugging
+        ego.set_transform(self.target_tf)
+        world.wait_for_tick()
 
-        # ego transform will cause issue, will use staging transform instead for path planning
-        # ego_tf = ego.get_transform()
-        ego_tf = self.staging_tf
+        ego_tf = ego.get_transform()
+        #ego_tf = self.staging_tf - if having issue with ego tf
         min_turning_radius = 5.0 # meters
         max_curvature = 1.0 / min_turning_radius
 
@@ -111,6 +110,7 @@ class Controller:
         # error checking
         if path_x is None or path_y is None or path_yaw is None or path_curvetype is None or path_length is None or path_segment_idxs is None or path_directions is None:
             raise RuntimeError("Path planning failed")
+
 
         if any(direction > 0 for direction in path_directions):
             raise RuntimeError("This parking controller requires a reverse-only approach")
@@ -130,10 +130,10 @@ class Controller:
         self.pth_i = closest_nondecreasing_path_index(self)
 
 
-        # diagnostic path values
-        # print(f"Path X: {self.path.x}")
-        # print("----------------------------------------------")
-        # print(f"Path Y: {self.path.y}")
+        #diagnostic path values
+        print(f"Path X: {self.path.x}")
+        print("----------------------------------------------")
+        print(f"Path Y: {self.path.y}")
         # print("----------------------------------------------")
         # print(f"Path Yaw: {self.path.yaw}")
         # print("----------------------------------------------")
@@ -142,17 +142,18 @@ class Controller:
         # print(f"Path lengths: {self.path.lengths}")
         # print("----------------------------------------------")
         # print(f"Path segment indices: {self.path.segment_idxs}")
-        # print("----------------------------------------------")
-        # print(f"Path directions: {self.path.directions}")
+        print("----------------------------------------------")
+        print(f"Path directions: {self.path.directions}")
+        print("----------------------------------------------")
+        print(f"current ego location: {ego_tf.location.x}, {ego_tf.location.y}")
+        print("----------------------------------------------")
+        print(f"current yaw: {ego_tf.rotation.yaw}")
 
 
 
     def control(self):
 
         # pure pursuit control algorithm to follow path planning
-        if self.correction_phase is not None:
-            self.correct_alignment()
-            return
 
         # current ego vehicle location/yaw
         ego_tf = self.ego.get_transform()

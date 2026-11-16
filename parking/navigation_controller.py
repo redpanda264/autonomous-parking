@@ -114,9 +114,9 @@ class NavigationController:
             self.ego.apply_control(control)
             print("Reached staging area, transitioning to parking controller...")
             #TODO: implement a state change to transition to the parking controller instead of just stopping the vehicle forever
-            return
+            return True
 
-        curve_range = 3 # how many waypoints ahead to look for curvature estimation
+        curve_range = 15 # how many waypoints ahead to look for curvature estimation
         future_idx = min(self.pth_i + curve_range, len(self.path.x) - 1)
 
         # estimate path curve sharpness
