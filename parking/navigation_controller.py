@@ -20,6 +20,13 @@ class NavigationController:
         self.ego = ego
         self.world = world
 
+        # TODO: Hard-coding wheelbase for now to calculate steering angle, this code is inconsistent. Change later.
+        self.wheelbase = 1.571
+        physics = ego.get_physics_control()
+        for wheel in physics.wheels:
+            if wheel.max_steer_angle > 0:
+                self.max_steer_angle = math.radians(wheel.max_steer_angle)
+                break
         self.aisle_rotation = carla.Rotation(yaw=90.0) # evil line that is suddenly required - rotation of the aisle where goal parking spot is located
 
         #TODO: fix this to an actual parking spot 
@@ -156,7 +163,7 @@ class NavigationController:
 
         # reverse = seg_direction < 0
         # might have to change throttle
-        control = carla.VehicleControl(throttle=0.75, steer=steering_angle, brake=0.0, reverse=True)
+        control = carla.VehicleControl(throttle=0.25, steer=steering_angle, brake=0.0, reverse=False)
         self.ego.apply_control(control)
 
     
