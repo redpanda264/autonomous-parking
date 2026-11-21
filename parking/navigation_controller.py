@@ -30,14 +30,15 @@ class NavigationController:
         self.aisle_rotation = carla.Rotation(yaw=90.0) # evil line that is suddenly required - rotation of the aisle where goal parking spot is located
 
         #TODO: figure out whatever madness is happening here
+        #TODO: get passed in from cam
         self.target_tf = carla.Transform( # THIS IS THE PARKING SPOT
-            carla.Location(x=-28.5, y=-38.8, z=0.5), # set to a spot in the A row
-            carla.Rotation(yaw=0),
+            carla.Location(x=-29, y=-38.4, z=0.5), # set to a spot in the A row
+            carla.Rotation(yaw=180),
         )
 
         staging_loc = carla.Transform( # THIS IS THE STAGING LOCATION
-            self.target_tf.location + carla.Location(x=-7.0, y=-5.0),
-            carla.Rotation(yaw=90.0)
+            self.target_tf.location + carla.Location(x=-5.0, y=-6.0),
+            carla.Rotation(yaw=-90.0)
         )
 
         # final staging transform
@@ -111,25 +112,51 @@ class NavigationController:
         ego_loc = self.ego.get_transform().location
         ego_tf = self.ego.get_transform()
         ego_yaw = math.radians(ego_tf.rotation.yaw)
-        reverse_yaw = ego_yaw - math.pi
+        travel_yaw = ego_yaw
 
         self.pth_i = closest_nondecreasing_path_index(self)
 
-        if self.pth_i >= len(self.path.x) - 1:
-            control = carla.VehicleControl(throttle=0.0, steer=0.0, brake=1.0, reverse=True)
-            self.ego.apply_control(control)
-            print("Reached staging area, transitioning to parking controller...")
-            #TODO: implement a state change to transition to the parking controller instead of just stopping the vehicle forever
-            return True
+        velocity = self.ego.get_velocity()
+        speed = math.sqrt(velocity.x ** 2 + velocity.y ** 2 + velocity.z ** 2)
 
-        curve_range = 15 # how many waypoints ahead to look for curvature estimation
+        remaining_distance = math.hypot(
+            ego_loc.x - self.path.x[self.pth_i],
+            ego_loc.y - self.path.y[self.pth_i],
+        ) + sum(
+            math.hypot(
+                self.path.x[i + 1] - self.path.x[i],
+                self.path.y[i + 1] - self.path.y[i],
+            )
+            for i in range(self.pth_i, len(self.path.x) - 1)
+        )
+        desired_speed = min(
+            3.0,
+            math.sqrt(2.0 * max(0.0, remaining_distance - 0.5)),
+        )
+        speed_error = desired_speed - speed
+        throttle = min(0.2, max(0.0, speed_error * 0.5))
+        brake = min(1.0, max(0.0, -speed_error))
+
+        goal_distance = math.hypot(
+            ego_loc.x - self.path.x[-1],
+            ego_loc.y - self.path.y[-1],
+        )
+        if self.pth_i >= len(self.path.x) - 1 and goal_distance <= 0.5:
+            self.ego.apply_control(carla.VehicleControl(
+                throttle=0.0, steer=0.0, brake=1.0, reverse=False))
+            if speed <= 0.1:
+                print("Reached staging area, transitioning to parking controller...")
+                return True
+            return False
+
+        curve_range = 5 # how many waypoints ahead to look for curvature estimation
         future_idx = min(self.pth_i + curve_range, len(self.path.x) - 1)
 
         # estimate path curve sharpness
         dx_future = self.path.x[future_idx] - ego_loc.x
         dy_future = self.path.y[future_idx] - ego_loc.y
         future_heading = math.atan2(dy_future, dx_future)
-        angle_diff = abs(future_heading - reverse_yaw)
+        angle_diff = abs(future_heading - travel_yaw)
         angle_diff = (angle_diff + math.pi) % (2 * math.pi) - math.pi
         angle_diff = abs(angle_diff)
 
@@ -144,7 +171,7 @@ class NavigationController:
         dy = self.path.y[lookahead_i] - ego_loc.y
 
         # subtract math.pi from ego_yaw so the error angle alpha is calculated relative to the rear bumper
-        alpha = math.atan2(dy, dx) - reverse_yaw
+        alpha = math.atan2(dy, dx) - travel_yaw
         alpha = (alpha + math.pi) % (2 * math.pi) - math.pi
         Ld = math.hypot(dx, dy) # lookahead distance
 
@@ -164,12 +191,11 @@ class NavigationController:
         # kinematic bicycle model (convert curvature from pure pursuit to steering angle)
         delta = math.atan(self.wheelbase*kappa)
         steering_angle = delta / self.max_steer_angle
-        steering_angle = -steering_angle
         steering_angle = max(-1, min(1, steering_angle))
 
         # reverse = seg_direction < 0
         # might have to change throttle
-        control = carla.VehicleControl(throttle=0.25, steer=steering_angle, brake=0.0, reverse=False)
+        control = carla.VehicleControl(throttle=throttle, steer=steering_angle, brake=brake, reverse=False)
         self.ego.apply_control(control)
 
     

@@ -72,11 +72,24 @@ def set_path(paths, lengths, ctypes, step_size):
     path.L = sum(np.abs(lengths))
 
     # check same path exist
+    # for i_path in paths:
+    #     type_is_same = (i_path.ctypes == path.ctypes)
+    #     length_is_close = (sum(np.abs(i_path.lengths)) - path.L) <= step_size
+    #     if type_is_same and length_is_close:
+    #         return paths  # same path found, so do not insert path
+
     for i_path in paths:
-        type_is_same = (i_path.ctypes == path.ctypes)
-        length_is_close = (sum(np.abs(i_path.lengths)) - path.L) <= step_size
-        if type_is_same and length_is_close:
-            return paths  # same path found, so do not insert path
+        same_type = i_path.ctypes == path.ctypes
+        same_signed_lengths = (
+            len(i_path.lengths) == len(path.lengths)
+            and all(
+                np.sign(old) == np.sign(new)
+                and abs(old - new) <= step_size
+                for old, new in zip(i_path.lengths, path.lengths)
+            )
+        )
+        if same_type and same_signed_lengths:
+            return paths
 
     # check path is long enough
     if path.L <= step_size:
@@ -436,12 +449,24 @@ def calc_paths(sx, sy, syaw, gx, gy, gyaw, maxc, step_size):
 
 def reeds_shepp_path_planning(sx, sy, syaw, gx, gy, gyaw, maxc, step_size=0.2):
     paths = calc_paths(sx, sy, syaw, gx, gy, gyaw, maxc, step_size)
+    # print('candidates:', [(p.ctypes, [round(v, 3) for v in p.lengths]) for p in paths]) # debugging
     if not paths:
+        print("No path found")
         return None, None, None, None, None, None, None  # could not generate any path
 
-    # search minimum cost path
-    best_path_index = paths.index(min(paths, key=lambda p: abs(p.L)))
-    b_path = paths[best_path_index]
+    reverse_paths = [
+        path for path in paths
+        if path.lengths and all(length <= 0.0 for length in path.lengths)
+    ]
+    if not reverse_paths:
+        print("No reverse path found")
+        return None, None, None, None, None, None, None
+
+    b_path = min(reverse_paths, key=lambda path: abs(path.L))
+
+    # #search minimum cost path
+    # best_path_index = paths.index(min(paths, key=lambda p: abs(p.L)))
+    # b_path = paths[best_path_index]
 
     return b_path.x, b_path.y, b_path.yaw, b_path.ctypes, b_path.lengths, b_path.segment_idxs, b_path.directions
 

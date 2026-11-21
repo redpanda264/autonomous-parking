@@ -30,6 +30,7 @@ def main():
     
     
     parking_controller = Controller(ego, world)
+    world.wait_for_tick()
     # parking logic loop
     try:
         while True:
