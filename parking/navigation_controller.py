@@ -37,7 +37,7 @@ class NavigationController:
         )
 
         staging_loc = carla.Transform( # THIS IS THE STAGING LOCATION
-            self.target_tf.location + carla.Location(x=-5.0, y=-6.0),
+            self.target_tf.location + carla.Location(x=-5.0, y=-5.0),
             carla.Rotation(yaw=-90.0)
         )
 
@@ -129,10 +129,7 @@ class NavigationController:
             )
             for i in range(self.pth_i, len(self.path.x) - 1)
         )
-        desired_speed = min(
-            3.0,
-            math.sqrt(2.0 * max(0.0, remaining_distance - 0.5)),
-        )
+        desired_speed = min(3.0, max(0.25, math.sqrt(2.0 * remaining_distance)))
         speed_error = desired_speed - speed
         throttle = min(0.2, max(0.0, speed_error * 0.5))
         brake = min(1.0, max(0.0, -speed_error))
@@ -141,7 +138,7 @@ class NavigationController:
             ego_loc.x - self.path.x[-1],
             ego_loc.y - self.path.y[-1],
         )
-        if self.pth_i >= len(self.path.x) - 1 and goal_distance <= 0.5:
+        if goal_distance <= 0.1:
             self.ego.apply_control(carla.VehicleControl(
                 throttle=0.0, steer=0.0, brake=1.0, reverse=False))
             if speed <= 0.1:

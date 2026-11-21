@@ -81,8 +81,8 @@ class Controller:
 
         ego_tf = ego.get_transform()
         #ego_tf = self.staging_tf - if having issue with ego tf
-        #TODO: hardcoded
-        min_turning_radius = 5.0 # meters
+        #TODO: hardcoded, should approximately match the x and y distance from the staging location to the target parking spot
+        min_turning_radius = 4.8 # meters
         max_curvature = 1.0 / min_turning_radius
 
         # Reeds-Shepp path algorithm from PythonRobotics
@@ -188,7 +188,7 @@ class Controller:
         kappa = 2 * math.sin(alpha) / Ld # curvature
 
         # fix for wheels sharply turning at the end. set curvature to 0 for the last few waypoints
-        if (len(self.path.x) - self.pth_i) <= 3:
+        if (len(self.path.x) - self.pth_i) <= 5:
             kappa = 0.0
 
         # kinematic bicycle model (convert curvature from pure pursuit to steering angle)
