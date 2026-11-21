@@ -29,14 +29,14 @@ class NavigationController:
                 break
         self.aisle_rotation = carla.Rotation(yaw=90.0) # evil line that is suddenly required - rotation of the aisle where goal parking spot is located
 
-        #TODO: fix this to an actual parking spot 
+        #TODO: figure out whatever madness is happening here
         self.target_tf = carla.Transform( # THIS IS THE PARKING SPOT
-            carla.Location(x=-35.5, y=-34.1, z=0.5), # TODO: find what the original values of these were
+            carla.Location(x=-28.5, y=-38.8, z=0.5), # set to a spot in the A row
             carla.Rotation(yaw=0),
         )
 
-        staging_loc = carla.Transform( # THIS IS THE STAGING LOCATION <-- why was this previously local
-            carla.Location(x=-35.5, y=-32.0, z=0.0), # original values set to 5.0, 5.0
+        staging_loc = carla.Transform( # THIS IS THE STAGING LOCATION
+            self.target_tf.location + carla.Location(x=-7.0, y=-5.0),
             carla.Rotation(yaw=90.0)
         )
 
@@ -54,28 +54,32 @@ class NavigationController:
         # A* setup
         resolution = 0.5  # grid resolution in meters
         robot_radius = 1.0  # robot radius in meters
-        parking_spots = ( # these are hardcoded bounding boxes that represent the parking spots
-                a_star.corners_to_rectangle((0.0,-15.0),(13.0,-46.5)),
-                a_star.corners_to_rectangle((-15.5,-15.0),(-2.5,-46.5)),
-                a_star.corners_to_rectangle((-31.0,-15.0),(-18.5,-46.5)))
+        parking_spots = ( # these are hardcoded bounding boxes that represent the parking spots FROM RIGHT TO LEFT, facing the colored boxes
+                a_star.corners_to_rectangle((0.5,-16.0),(13.6,-46.5)),
+                a_star.corners_to_rectangle((-16.5,-16.0),(-2.5,-46.5)),
+                a_star.corners_to_rectangle((-32.5,-16.0),(-18.9,-46.5)))
         
         bounds = (-40.0, 20.0, -50.0, -10.0) # this covers the ENTIRE parking lot from minX to maxX, minY to maxY in that order
-        
-        # TESTING LINE TO SEE THE OCCUPIED PARKING SPOTS
-        for cx, cy, L, W, yaw in parking_spots:
-            world.debug.draw_box(carla.BoundingBox(carla.Location(cx, cy, 0.5), carla.Vector3D(L / 2, W / 2, 0.5)),
-                                 carla.Rotation(yaw=yaw), 0.05, carla.Color(255, 0, 0), 60.0)
-        
-        for cx, cy, L, W, yaw in (a_star.corners_to_rectangle((bounds[0],bounds[2]),(bounds[1],bounds[3])),):
-            world.debug.draw_box(carla.BoundingBox(carla.Location(cx, cy, 0.5), carla.Vector3D(L / 2, W / 2, 0.5)),
-                                 carla.Rotation(yaw=yaw), 0.05, carla.Color(0, 0, 255), 60.0)
-
         obstacle_x, obstacle_y = a_star.rectangles_to_points(parking_spots, step = resolution * 0.5)
+
+        ### A* BOUNDS DEBUG LINES HERE ###
+
+        world.debug.draw_point(self.target_tf.location + carla.Location(z=0.5), size=0.1, color=carla.Color(255, 0, 0), life_time=60.0) # parking spot
+        world.debug.draw_point(staging_loc.location + carla.Location(z=0.5), size=0.1, color=carla.Color(0, 255, 0), life_time=60.0) # staging spot
+
+        for cx, cy, L, W, yaw in parking_spots: # draws bounding boxes for spots
+            world.debug.draw_box(carla.BoundingBox(carla.Location(cx, cy, 0.5), carla.Vector3D(L / 2, W / 2, 0.5)),
+                                 carla.Rotation(yaw=yaw), 0.05, carla.Color(255, 0, 0), life_time=60.0)
+        
+        for cx, cy, L, W, yaw in (a_star.corners_to_rectangle((bounds[0],bounds[2]),(bounds[1],bounds[3])),): # draws complete area
+            world.debug.draw_box(carla.BoundingBox(carla.Location(cx, cy, 0.5), carla.Vector3D(L / 2, W / 2, 0.5)),
+                                 carla.Rotation(yaw=yaw), 0.05, carla.Color(0, 0, 255), life_time=60.0)
+        
+        ### A* BOUNDS DEBUG LINES END ###
 
         #A* execution
         astar_planner = a_star.AStarPlanner(obstacle_x, obstacle_y, resolution, robot_radius, bounds)
-
-        world.wait_for_tick() # THIS WAS IT THE WHOLE TIME AHHHHHHHHHHHHH
+        world.wait_for_tick()
 
         print("start: (" + str(start_tf.location.x) + ", " + str(start_tf.location.y) + ")")
         print("goal: (" + str(self.staging_tf.location.x) + ", " +  str(self.staging_tf.location.y) + ")")
@@ -88,6 +92,8 @@ class NavigationController:
         if (pathx and pathy):
             print("xs:", [round(x, 2) for x in pathx]) # changed from rx since it wasn't defined. not sure if that's correct
             print("ys:", [round(y, 2) for y in pathy]) # ry o ty
+        else:
+            raise ValueError("A* path is invalid")
 
         self.path = AStarPath(
             x=pathx,
@@ -96,7 +102,7 @@ class NavigationController:
 
         # path index
         self.pth_i = 0
-        #self.pth_i = closest_nondecreasing_path_index(self)
+        # self.pth_i = closest_nondecreasing_path_index(self)
 
     # pure pursuit
     def control(self):

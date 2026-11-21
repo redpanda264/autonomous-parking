@@ -182,6 +182,7 @@ def sample_box(cx, cy, ex, ey, yaw, step):
     
     return wx, wy
 
+# moved corner_to_rectangle and 
 @staticmethod
 def corners_to_rectangle(corner1, corner2, yaw=0.0):
     """
