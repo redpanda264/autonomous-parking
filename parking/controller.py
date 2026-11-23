@@ -42,11 +42,6 @@ class Controller:
             carla.Rotation(yaw=180),
         )
 
-        staging_loc = carla.Transform( # THIS IS THE STAGING LOCATION
-            self.target_tf.location + carla.Location(x=-5.5, y=-6.0),
-            carla.Rotation(yaw=-90.0)
-        )
-
         # control parameters to perform correction if the vehicle is not aligned with the parking spot
         self.final_alignment_distance = 1.0
         self.position_tolerance = 0.2
