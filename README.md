@@ -77,3 +77,24 @@ $ pip install pygame\
 $ pip install shapely\
 $ pip install networkx
 
+# YOLO camera system
+
+YOLO sahi is a object detection models with SAHI (Slicing Aided Hyper Inference) to detect small or distant objects in large, high-resolution images.
+
+In our project, YOLO sahi works as three separate cameras for monitoring parking lot rows A/B, C/D, and E/F.
+
+YOLO camera system can detect and update available parking slots by requests.  
+
+
+## Run the camera
+
+Start carla server and load Town05. Setup required environments. 
+
+Start the monitor with the bundled model, layout, and SAHI inference.
+
+```powershell
+python -m parking.parking_monitor
+```
+
+## Ready for running main.py script
+After monitors popup, YOLO camera system will acquire coordinates of target and staging area. Therefore, the vehicle is ready for autonomous parking.

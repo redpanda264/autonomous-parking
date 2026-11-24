@@ -2,23 +2,22 @@
 
 A* grid planning
 
-author: Atsushi Sakai(@Atsushi_twi)
-        Nikos Kanargias (nkana@tee.gr)
-
 See Wikipedia article (https://en.wikipedia.org/wiki/A*_search_algorithm)
+Based on Atsushi Sakai's implementation (https://github.com/AtsushiSakai/PythonRobotics/blob/master/PathPlanning/AStar/a_star.py)
+    authors: Atsushi Sakaib (@Atsushi_twi)
+             Nikos Kanargias (nkana@tee.gr)
 
 """
 
 import math
-
 import matplotlib.pyplot as plt
-
-show_animation = True
-
+import heapq
+import numpy as np
 
 class AStarPlanner:
 
-    def __init__(self, ox, oy, resolution, rr):
+    # initialize
+    def __init__(self, ox, oy, resolution, rr, bounds, is_blocked=None):
         """
         Initialize grid map for a star planning
 
@@ -30,198 +29,136 @@ class AStarPlanner:
 
         self.resolution = resolution
         self.rr = rr
-        self.min_x, self.min_y = 0, 0
-        self.max_x, self.max_y = 0, 0
+        
+        self.min_x, self.max_x, self.min_y, self.max_y = bounds
+        if not (self.max_x > self.min_x and self.max_y > self.min_y):
+            raise ValueError("bounds must be (min_x, max_x, min_y, max_y) in CARLA world coords with max > min; "
+                f"got {bounds}")
+
+        self.x_width = abs(int(round((self.max_x - self.min_x) / resolution))) + 1
+        self.y_width = abs(int(round((self.max_y - self.min_y) / resolution))) + 1
+
+        self.is_blocked = is_blocked
+        self.motions = self.get_motion_model()
+        
         self.obstacle_map = None
-        self.x_width, self.y_width = 0, 0
-        self.motion = self.get_motion_model()
         self.calc_obstacle_map(ox, oy)
+    
+    # set of functions to go from grid <--> world
+    def to_index(self, x, y):
+        return (int(round((x - self.min_x) / self.resolution)),
+                int(round((y - self.min_y) / self.resolution)))
+ 
+    def to_world(self, ix, iy):
+        return ix * self.resolution + self.min_x, iy * self.resolution + self.min_y
+    
+    # obstacle map stuff
+    def calc_obstacle_map(self, ox, oy):
+        grid = np.zeros((self.x_width, self.y_width), dtype=bool)
+        if len(ox) == 0:
+            return grid
+        r = int(math.ceil(self.rr / self.resolution))
+        offsets = [(dx, dy) for dx in range(-r, r + 1) for dy in range(-r, r + 1)
+                   if math.hypot(dx, dy) * self.resolution <= self.rr]
+        ix = np.round((np.asarray(ox) - self.min_x) / self.resolution).astype(int)
+        iy = np.round((np.asarray(oy) - self.min_y) / self.resolution).astype(int)
+        for i, j in set(zip(ix.tolist(), iy.tolist())):
+            for dx, dy in offsets:
+                a, b = i + dx, j + dy
+                if 0 <= a < self.x_width and 0 <= b < self.y_width:
+                    grid[a, b] = True
+        
+        self.obstacle_map = grid
+    
+    def blocked(self, node):
+        ix, iy = node
+        if not (0 <= ix < self.x_width and 0 <= iy < self.y_width):
+            return True
+        if self.obstacle_map[ix, iy]:
+            return True
+        if self.is_blocked is not None:
+            if node not in self._extra_cache:
+                self._extra_cache[node] = bool(self.is_blocked(*self.to_world(ix, iy)))
+            return self._extra_cache[node]
+        return False
 
-    class Node:
-        def __init__(self, x, y, cost, parent_index):
-            self.x = x  # index of grid
-            self.y = y  # index of grid
-            self.cost = cost
-            self.parent_index = parent_index
-
-        def __str__(self):
-            return str(self.x) + "," + str(self.y) + "," + str(
-                self.cost) + "," + str(self.parent_index)
-
+    # search
     def planning(self, sx, sy, gx, gy):
         """
-        A star path search
+        Plans a route from a given start to a given goal based on the current state of the A* planner
 
-        input:
-            s_x: start x position [m]
-            s_y: start y position [m]
-            gx: goal x position [m]
-            gy: goal y position [m]
-
-        output:
-            rx: x position list of the final path
-            ry: y position list of the final path
+        sx: x position of the start
+        sy: y position of the start
+        gx: x position of the goal
+        gy: y position of the goal
         """
+        start, goal = self.to_index(sx, sy), self.to_index(gx, gy)
 
-        start_node = self.Node(self.calc_xy_index(sx, self.min_x),
-                               self.calc_xy_index(sy, self.min_y), 0.0, -1)
-        goal_node = self.Node(self.calc_xy_index(gx, self.min_x),
-                              self.calc_xy_index(gy, self.min_y), 0.0, -1)
-
-        open_set, closed_set = dict(), dict()
-        open_set[self.calc_grid_index(start_node)] = start_node
-
-        while True:
-            if len(open_set) == 0:
-                print("Open set is empty..")
+        # safety
+        for name, (px, py), node in (("start", (sx, sy), start), ("goal", (gx, gy), goal)):
+            if self.blocked(node):
+                ix, iy = node
+                b = ""
+                if not (0 <= ix < self.x_width and 0 <= iy < self.y_width):
+                    b = f"outside bounds x[{self.min_x}, {self.max_x}] y[{self.min_y}, {self.max_y}]"
+                elif self.obstacle_map[ix, iy]:
+                    wx, wy = self.to_world(ix, iy)
+                    b = print(f"inside an obstacle or robot radius {self.rr} m inflation (cell center {wx:.2f}, {wy:.2f}")
+                
+                a = f"{name} {(px, py)} exploded bc"
+                print(f"{a} {b}")
+                return (None, None)
+ 
+        def h(n):
+            return math.hypot(n[0] - goal[0], n[1] - goal[1]) * self.resolution
+ 
+        g_cost = {start: 0.0}
+        parent = {start: None}
+        closed = set()
+        heap = [(h(start), 0, start)]
+        tie = 0
+ 
+        while heap:
+            _, _, cur = heapq.heappop(heap)
+            if cur in closed:
+                continue
+            closed.add(cur)
+            if cur == goal:
                 break
-
-            c_id = min(
-                open_set,
-                key=lambda o: open_set[o].cost + self.calc_heuristic(goal_node,
-                                                                     open_set[
-                                                                         o]))
-            current = open_set[c_id]
-
-            # show graph
-            if show_animation:  # pragma: no cover
-                plt.plot(self.calc_grid_position(current.x, self.min_x),
-                         self.calc_grid_position(current.y, self.min_y), "xc")
-                # for stopping simulation with the esc key.
-                plt.gcf().canvas.mpl_connect('key_release_event',
-                                             lambda event: [exit(
-                                                 0) if event.key == 'escape' else None])
-                if len(closed_set.keys()) % 10 == 0:
-                    plt.pause(0.001)
-
-            if current.x == goal_node.x and current.y == goal_node.y:
-                print("Find goal")
-                goal_node.parent_index = current.parent_index
-                goal_node.cost = current.cost
-                break
-
-            # Remove the item from the open set
-            del open_set[c_id]
-
-            # Add it to the closed set
-            closed_set[c_id] = current
-
-            # expand_grid search grid based on motion model
-            for i, _ in enumerate(self.motion):
-                node = self.Node(current.x + self.motion[i][0],
-                                 current.y + self.motion[i][1],
-                                 current.cost + self.motion[i][2], c_id)
-                n_id = self.calc_grid_index(node)
-
-                # If the node is not safe, do nothing
-                if not self.verify_node(node):
+            for dx, dy, c in self.motions:
+                nxt = (cur[0] + dx, cur[1] + dy)
+                if nxt in closed or self.blocked(nxt):
                     continue
-
-                if n_id in closed_set:
+                # no corner cutting on diagonals
+                if dx != 0 and dy != 0 and (self.blocked((cur[0] + dx, cur[1])) or
+                                            self.blocked((cur[0], cur[1] + dy))):
                     continue
-
-                if n_id not in open_set:
-                    open_set[n_id] = node  # discovered a new node
-                else:
-                    if open_set[n_id].cost > node.cost:
-                        # This path is the best until now. record it
-                        open_set[n_id] = node
-
-        rx, ry = self.calc_final_path(goal_node, closed_set)
-
-        return rx, ry
-
-    def calc_final_path(self, goal_node, closed_set):
-        # generate final course
-        rx, ry = [self.calc_grid_position(goal_node.x, self.min_x)], [
-            self.calc_grid_position(goal_node.y, self.min_y)]
-        parent_index = goal_node.parent_index
-        while parent_index != -1:
-            n = closed_set[parent_index]
-            rx.append(self.calc_grid_position(n.x, self.min_x))
-            ry.append(self.calc_grid_position(n.y, self.min_y))
-            parent_index = n.parent_index
-
-        return rx, ry
-
-    @staticmethod
-    def calc_heuristic(n1, n2):
-        w = 1.0  # weight of heuristic
-        d = w * math.hypot(n1.x - n2.x, n1.y - n2.y)
-        return d
-
-    def calc_grid_position(self, index, min_position):
-        """
-        calc grid position
-
-        :param index:
-        :param min_position:
-        :return:
-        """
-        pos = index * self.resolution + min_position
-        return pos
-
-    def calc_xy_index(self, position, min_pos):
-        return round((position - min_pos) / self.resolution)
-
-    def calc_grid_index(self, node):
-        return (node.y - self.min_y) * self.x_width + (node.x - self.min_x)
-
-    def verify_node(self, node):
-        px = self.calc_grid_position(node.x, self.min_x)
-        py = self.calc_grid_position(node.y, self.min_y)
-
-        if px < self.min_x:
-            return False
-        elif py < self.min_y:
-            return False
-        elif px >= self.max_x:
-            return False
-        elif py >= self.max_y:
-            return False
-
-        # collision check
-        if self.obstacle_map[node.x][node.y]:
-            return False
-
-        return True
-
-    def calc_obstacle_map(self, ox, oy):
-
-        self.min_x = round(min(ox))
-        self.min_y = round(min(oy))
-        self.max_x = round(max(ox))
-        self.max_y = round(max(oy))
-        print("min_x:", self.min_x)
-        print("min_y:", self.min_y)
-        print("max_x:", self.max_x)
-        print("max_y:", self.max_y)
-
-        self.x_width = round((self.max_x - self.min_x) / self.resolution)
-        self.y_width = round((self.max_y - self.min_y) / self.resolution)
-        print("x_width:", self.x_width)
-        print("y_width:", self.y_width)
-
-        # obstacle map generation
-        self.obstacle_map = [[False for _ in range(self.y_width)]
-                             for _ in range(self.x_width)]
-        for ix in range(self.x_width):
-            x = self.calc_grid_position(ix, self.min_x)
-            for iy in range(self.y_width):
-                y = self.calc_grid_position(iy, self.min_y)
-                for iox, ioy in zip(ox, oy):
-                    d = math.hypot(iox - x, ioy - y)
-                    if d <= self.rr:
-                        self.obstacle_map[ix][iy] = True
-                        break
+                ng = g_cost[cur] + c * self.resolution
+                if ng < g_cost.get(nxt, float("inf")):
+                    g_cost[nxt] = ng
+                    parent[nxt] = cur
+                    tie += 1
+                    heapq.heappush(heap, (ng + h(nxt), tie, nxt))
+        else:
+            print("no path found")
+            return None, None
+ 
+        rx, ry = [], []
+        n = goal
+        while n is not None:
+            x, y = self.to_world(*n)
+            rx.append(x)
+            ry.append(y)
+            n = parent[n]
+        return rx[::-1], ry[::-1]
 
     @staticmethod
     def get_motion_model():
         # dx, dy, cost
-        motion = [[1, 0, 1],
-                  [0, 1, 1],
-                  [-1, 0, 1],
-                  [0, -1, 1],
+        motion = [[1, 0, 1.0],
+                  [0, 1, 1.0],
+                  [-1, 0, 1.0],
+                  [0, -1, 1.0],
                   [-1, -1, math.sqrt(2)],
                   [-1, 1, math.sqrt(2)],
                   [1, -1, math.sqrt(2)],
@@ -229,54 +166,79 @@ class AStarPlanner:
 
         return motion
 
+def sample_box(cx, cy, ex, ey, yaw, step):
+    """
+    Fills an oriented rectangle (center, half extents, and yaw) with points
+    """
+    xs = np.arange(-ex, ex + step, step)
+    ys = np.arange(-ey, ey + step, step)
+    gx, gy = np.meshgrid(xs,ys)
+    
+    # adjustments made if yaw exists
+    c, s = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
+    
+    wx = cx + gx.ravel() * c - gy.ravel() * s
+    wy = cy + gx.ravel() * s + gy.ravel() * c
+    
+    return wx, wy
 
+# moved corner_to_rectangle and 
+@staticmethod
+def corners_to_rectangle(corner1, corner2, yaw=0.0):
+    """
+    Given two corners (x, y) of a rectangle, output an iterable (x, y, width, height, yaw)
+    such that: x, y = the center of the rectangle
+    corner1 = one corner of the rectangle
+    corner2 = the opposite corner of the rectangle, specifically opposite
+    yaw = yaw
+    """
+    (x1, y1), (x2, y2) = corner1, corner2
+    return (x1 + x2) / 2.0, (y1 + y2) / 2.0, abs(x2 - x1), abs(y2 - y1), yaw
+
+@staticmethod
+def rectangles_to_points(rects, step=0.5):
+    """
+    rects = iterable of multiple (x, y, width, height)s
+    """
+    ox, oy = [], []
+    for cx, cy, width, height, yaw in rects:
+        wx, wy = sample_box(cx, cy, width / 2.0, height / 2.0, yaw, step)
+        ox += wx.tolist()
+        oy += wy.tolist()
+    return ox, oy
+
+"""
+# test function !, basically ported this over to navigation_controller actually lol
 def main():
     print(__file__ + " start!!")
 
     # start and goal position
-    sx = 10.0  # [m]
-    sy = 10.0  # [m]
-    gx = 50.0  # [m]
-    gy = 50.0  # [m]
-    grid_size = 2.0  # [m]
-    robot_radius = 1.0  # [m]
+    sx = -16.0
+    sy = -12.0
+    gx = -17.8
+    gy = -48.0
 
-    # set obstacle positions
-    ox, oy = [], []
-    for i in range(-10, 60):
-        ox.append(i)
-        oy.append(-10.0)
-    for i in range(-10, 60):
-        ox.append(60.0)
-        oy.append(i)
-    for i in range(-10, 61):
-        ox.append(i)
-        oy.append(60.0)
-    for i in range(-10, 61):
-        ox.append(-10.0)
-        oy.append(i)
-    for i in range(-10, 40):
-        ox.append(20.0)
-        oy.append(i)
-    for i in range(0, 40):
-        ox.append(40.0)
-        oy.append(60.0 - i)
+    # example state of the lot
+    parking_spots = (
+        AStarPlanner.corners_to_rectangle((0.0,-14.0),(13.0,-46.5)),
+        AStarPlanner.corners_to_rectangle((-15.5,-14.0),(-2.5,-46.5)),
+        AStarPlanner.corners_to_rectangle((-31.0,-14.0),(-18.5,-46.5)))
+    bounds = (-37, 17, -48, -11)
 
-    if show_animation:  # pragma: no cover
-        plt.plot(ox, oy, ".k")
-        plt.plot(sx, sy, "og")
-        plt.plot(gx, gy, "xb")
-        plt.grid(True)
-        plt.axis("equal")
+    # state of the map
+    grid_size = 0.5
+    robot_radius = 1.0
 
-    a_star = AStarPlanner(ox, oy, grid_size, robot_radius)
+    ox, oy = rectangles_to_points(parking_spots, step = grid_size * 0.5)
+
+    a_star = AStarPlanner(ox, oy, grid_size, robot_radius, bounds)
     rx, ry = a_star.planning(sx, sy, gx, gy)
 
-    if show_animation:  # pragma: no cover
-        plt.plot(rx, ry, "-r")
-        plt.pause(0.001)
-        plt.show()
+    if rx and ry:
+        print("xs:", [round(x, 2) for x in rx])
+        print("ys:", [round(y, 2) for y in ry])
 
 
 if __name__ == '__main__':
     main()
+"""

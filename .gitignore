@@ -60,3 +60,7 @@ venv/
 
 # Windows
 Thumbs.db
+config.example.json
+config.example.json
+config.example.json
+parking/a_star2.py

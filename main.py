@@ -12,17 +12,16 @@ def main():
         print(f"Setup failed: {e}")
         return
 
+    world.wait_for_tick()
     navigation_controller = NavigationController(ego, world)
     # navigation logic loop
     try:
         while True:
-            navigation_controller.control()
-            world.wait_for_tick()
-            
+            if(navigation_controller.control()):
+                break # transition to parking controller
+            world.wait_for_tick()   
     except KeyboardInterrupt:
         print("Stopping...")
-
-    finally:
         # destroy actors, stop navigation script
         ego.destroy()
         for vehicle in spawned_vehicles:
@@ -31,16 +30,14 @@ def main():
     
     
     parking_controller = Controller(ego, world)
+    world.wait_for_tick()
     # parking logic loop
     try:
         while True:
             parking_controller.control()
             world.wait_for_tick()
-            
     except KeyboardInterrupt:
         print("Stopping...")
-
-    finally:
         # destroy actors, stop parking script
         ego.destroy()
         for vehicle in spawned_vehicles:
@@ -48,6 +45,6 @@ def main():
         print("Actors destroyed")
 
 
-# run main loop when file is executed directlya
+# run main loop when file is executed directly
 if __name__ == "__main__":
     main()

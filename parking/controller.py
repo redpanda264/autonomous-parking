@@ -3,6 +3,8 @@ import math
 import time
 from dataclasses import dataclass
 from parking.reeds_shepp_path_planning import reeds_shepp_path_planning
+from parking.staging_transform import get_target_transform
+from utils.path_utils import closest_nondecreasing_path_index, lookahead_index
 
 # dataclass to hold path data
 @dataclass
@@ -35,11 +37,14 @@ class Controller:
         #     carla.Rotation(yaw=180),
         # )
 
-        #spot on right side
-        self.target_tf = carla.Transform(
-            carla.Location(x=-23, y=-38.3, z=0.5),
-            carla.Rotation(yaw=0),
+        #TODO: get passed in from cam
+        """
+        self.target_tf = carla.Transform( # THIS IS THE PARKING SPOT
+            carla.Location(x=-29, y=-38.4, z=0.5), # set to a spot in the A row
+            carla.Rotation(yaw=180),
         )
+        """
+        self.target_tf = get_target_transform()
 
         # control parameters to perform correction if the vehicle is not aligned with the parking spot
         self.final_alignment_distance = 1.0
@@ -57,28 +62,8 @@ class Controller:
         self.target_forward = (math.cos(target_yaw), math.sin(target_yaw))
 
         # assume car is aligned with the aisle
+        #TODO: change? or hardcode
         self.aisle_rotation = carla.Rotation(yaw=90.0) # hard coded for now, should be calculated from aisle
-
-        # move the rotated target transform right and backwards (spot to left)
-        # staging_loc = self.target_tf.transform(
-        #     carla.Location(x=5.0, y=-5.0, z=0.0)
-        # )
-
-        #(spot to right)
-        staging_loc = self.target_tf.transform(
-            carla.Location(x=5.0, y=5.0, z=0.0)
-        )
-
-        # final staging transform
-        self.staging_tf = carla.Transform(
-            staging_loc,
-            self.aisle_rotation
-        )
-
-        # spawn ego at the staging position for testing
-        ego.set_transform(self.staging_tf)
-        world.wait_for_tick()
-
 
         # TODO: Hard-coding wheelbase for now to calculate steering angle, this code is inconsistent. Change later.
         self.wheelbase = 1.571
@@ -93,11 +78,10 @@ class Controller:
                 self.max_steer_angle = math.radians(wheel.max_steer_angle)
                 break
 
-
-        # ego transform will cause issue, will use staging transform instead for path planning
-        # ego_tf = ego.get_transform()
-        ego_tf = self.staging_tf
-        min_turning_radius = 5.0 # meters
+        ego_tf = ego.get_transform()
+        #ego_tf = self.staging_tf - if having issue with ego tf
+        #TODO: hardcoded, should approximately match the x and y distance from the staging location to the target parking spot
+        min_turning_radius = 4.8 # meters
         max_curvature = 1.0 / min_turning_radius
 
         # Reeds-Shepp path algorithm from PythonRobotics
@@ -110,6 +94,7 @@ class Controller:
         # error checking
         if path_x is None or path_y is None or path_yaw is None or path_curvetype is None or path_length is None or path_segment_idxs is None or path_directions is None:
             raise RuntimeError("Path planning failed")
+
 
         if any(direction > 0 for direction in path_directions):
             raise RuntimeError("This parking controller requires a reverse-only approach")
@@ -126,13 +111,13 @@ class Controller:
 
         # path index
         self.pth_i = 0
-        self.pth_i = self.closest_nondecreasing_path_index()
+        self.pth_i = closest_nondecreasing_path_index(self)
 
 
-        # diagnostic path values
-        # print(f"Path X: {self.path.x}")
-        # print("----------------------------------------------")
-        # print(f"Path Y: {self.path.y}")
+        #diagnostic path values
+        print(f"Path X: {self.path.x}")
+        print("----------------------------------------------")
+        print(f"Path Y: {self.path.y}")
         # print("----------------------------------------------")
         # print(f"Path Yaw: {self.path.yaw}")
         # print("----------------------------------------------")
@@ -141,56 +126,32 @@ class Controller:
         # print(f"Path lengths: {self.path.lengths}")
         # print("----------------------------------------------")
         # print(f"Path segment indices: {self.path.segment_idxs}")
-        # print("----------------------------------------------")
-        # print(f"Path directions: {self.path.directions}")
+        print("----------------------------------------------")
+        print(f"Path directions: {self.path.directions}")
+        print("----------------------------------------------")
+        print(f"current ego location: {ego_tf.location.x}, {ego_tf.location.y}")
+        print("----------------------------------------------")
+        print(f"current yaw: {ego_tf.rotation.yaw}")
 
 
 
     def control(self):
 
-        # pure pursuit control algorithm to follow path planning
-        if self.correction_phase is not None:
-            self.correct_alignment()
-            return
-
         # current ego vehicle location/yaw
+        ego_loc = self.ego.get_transform().location
         ego_tf = self.ego.get_transform()
-        ego_loc = ego_tf.location
         ego_yaw = math.radians(ego_tf.rotation.yaw)
         reverse_yaw = ego_yaw - math.pi
 
-        self.pth_i = self.closest_nondecreasing_path_index()
+        self.pth_i = closest_nondecreasing_path_index(self)
 
-
-        # calculate distance to target and heading error
-        target_distance = math.hypot(
-            ego_loc.x - self.target_tf.location.x,
-            ego_loc.y - self.target_tf.location.y,
-        )
-
-        # calculate heading error relative to target yaw
-        target_yaw = math.radians(self.target_tf.rotation.yaw)
-        heading_error =     (target_yaw - ego_yaw + math.pi) % (2 * math.pi) - math.pi
-        remaining = ((ego_loc.x - self.target_tf.location.x) * self.target_forward[0]
-                     + (ego_loc.y - self.target_tf.location.y) * self.target_forward[1])
-        on_final_approach = (target_distance <= self.final_alignment_distance
-                             and self.pth_i >= len(self.path.x) - 7)
-        aligned = (target_distance <= self.position_tolerance
-                   and abs(heading_error) <= self.heading_tolerance)
-        passed_target = on_final_approach and remaining <= 0.0
-
-        if self.parked or self.alignment_failed:
+        if self.pth_i >= len(self.path.x) - 1:
             control = carla.VehicleControl(throttle=0.0, steer=0.0, brake=1.0, reverse=True)
             self.ego.apply_control(control)
-            return
-        if aligned or passed_target:
-            # Stop first, then verify the pose or begin a physical correction.
-            self.correction_phase = "verify" if aligned else "brake_forward"
-            self.correction_started_at = time.monotonic()
-            self.correct_alignment()
-            return
+            print("Reached target parking spot.")
+            return True
 
-        curve_range = 4
+        curve_range = 5 # how many waypoints ahead to look for curvature estimation
         future_idx = min(self.pth_i + curve_range, len(self.path.x) - 1)
 
         # estimate path curve sharpness
@@ -205,20 +166,13 @@ class Controller:
         max_lookahead = 1.8
 
         lookahead_dist = max(min_lookahead, max_lookahead - (angle_diff * 0.8)) # dynamic lookahead distance based on curve sharpness - angle_diff multiplier changes dropoff speed
-        lookahead_i = self.lookahead_index(lookahead_dist)
+        lookahead_i = lookahead_index(self, lookahead_dist)
 
         # find heading error (alpha) and normalize to [-pi, pi]
         dx = self.path.x[lookahead_i] - ego_loc.x
         dy = self.path.y[lookahead_i] - ego_loc.y
-        if on_final_approach:
-            # Extend the straight reference beyond the endpoint so heading can
-            # still converge when less than a lookahead distance remains.
-            lookahead_dist = 0.7
-            reference_distance = remaining - lookahead_dist
-            dx = self.target_tf.location.x + reference_distance * self.target_forward[0] - ego_loc.x
-            dy = self.target_tf.location.y + reference_distance * self.target_forward[1] - ego_loc.y
 
-        # Calculate the pursuit angle relative to the reverse travel direction.
+        # subtract math.pi from ego_yaw so the error angle alpha is calculated relative to the rear bumper
         alpha = math.atan2(dy, dx) - reverse_yaw
         alpha = (alpha + math.pi) % (2 * math.pi) - math.pi
         Ld = math.hypot(dx, dy) # lookahead distance
@@ -229,8 +183,12 @@ class Controller:
         print(f"pth_i: {self.pth_i}")
         print(f"lookahed idx: {lookahead_i}")
         print(f"lookahed dist: {Ld}")
-
+        
         kappa = 2 * math.sin(alpha) / Ld # curvature
+
+        # fix for wheels sharply turning at the end. set curvature to 0 for the last few waypoints
+        if (len(self.path.x) - self.pth_i) <= 5:
+            kappa = 0.0
 
         # kinematic bicycle model (convert curvature from pure pursuit to steering angle)
         delta = math.atan(self.wheelbase*kappa)
@@ -238,17 +196,18 @@ class Controller:
         steering_angle = -steering_angle
         steering_angle = max(-1, min(1, steering_angle))
 
-        #reverse = seg_direction < 0
-        velocity = self.ego.get_velocity()
-        speed = math.sqrt(velocity.x ** 2 + velocity.y ** 2 + velocity.z ** 2)
-        throttle, brake = 0.2, 0.0
-        if target_distance < 1.5:
-            desired_speed = min(0.45, max(0.22, target_distance * 0.4))
-            speed_error = desired_speed - speed
-            throttle = min(0.2, max(0.0, speed_error * 0.5))
-            brake = min(0.5, max(0.0, -speed_error * 0.5))
-        control = carla.VehicleControl(throttle=throttle, steer=steering_angle, brake=brake, reverse=True)
+        # reverse = seg_direction < 0
+        # might have to change throttle
+        control = carla.VehicleControl(throttle=0.18, steer=steering_angle, brake=0.0, reverse=True)
         self.ego.apply_control(control)
+
+
+
+
+
+
+    #TODO: remove unused methods below, refactor.
+
 
     # NEW METHOD: Correct the vehicle's alignment with the parking spot
     def correct_alignment(self):
@@ -337,35 +296,6 @@ class Controller:
             throttle=min(0.2, max(0.0, speed_error * 0.5)),
             steer=steer, brake=min(0.5, max(0.0, -speed_error * 0.5)),
             reverse=reverse))
-
-
-    def closest_nondecreasing_path_index(self):
-        ego_loc = self.ego.get_transform().location
-        min_dist = math.inf
-        min_i = self.pth_i
-
-        for i in range(self.pth_i, len(self.path.x)):
-            cur_dist = math.dist((ego_loc.x, ego_loc.y), (self.path.x[i], self.path.y[i]))
-            if cur_dist <= min_dist:
-                min_dist = cur_dist
-                min_i = i
-            else:
-                # stop if distance starts increasing
-                break
-
-        return min_i
-
-
-    def lookahead_index(self, lookahead_dist):
-        ego_loc = self.ego.get_transform().location
-
-        for i in range(self.pth_i, len(self.path.x)):
-            cur_dist = math.dist((ego_loc.x, ego_loc.y), (self.path.x[i], self.path.y[i]))
-
-            if cur_dist >= lookahead_dist:
-                return i
-
-        return len(self.path.x) - 1
 
 
 

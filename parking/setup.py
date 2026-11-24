@@ -49,7 +49,7 @@ def setup():
     ego_bp.set_attribute("role_name", "hero")
     spawn_points = world.get_map().get_spawn_points() # list of all spawn points in map
     ego_spawn_point = carla.Transform(
-        carla.Location(x=0, y=0, z=0.5),
+        carla.Location(x=12, y=-12.4, z=0.5),
         carla.Rotation(yaw=180),
     )
 
