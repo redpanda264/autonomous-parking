@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from parking import a_star
 from parking import controller
 from utils.path_utils import closest_nondecreasing_path_index, lookahead_index
+from parking.staging_transform import return_staging_transform
+from parking.staging_transform import get_target_transform
 
 # dataclass to hold path data
 @dataclass
@@ -31,15 +33,22 @@ class NavigationController:
 
         #TODO: figure out whatever madness is happening here
         #TODO: get passed in from cam
+        """
         self.target_tf = carla.Transform( # THIS IS THE PARKING SPOT
             carla.Location(x=-29, y=-38.4, z=0.5), # set to a spot in the A row
             carla.Rotation(yaw=180),
         )
-
+        """
+        self.target_tf = get_target_transform()
+        
+        """
         staging_loc = carla.Transform( # THIS IS THE STAGING LOCATION
             self.target_tf.location + carla.Location(x=-5.0, y=-5.0),
             carla.Rotation(yaw=-90.0)
         )
+        """
+
+        staging_loc = return_staging_transform()
 
         # final staging transform
         '''

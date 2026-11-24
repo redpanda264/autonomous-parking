@@ -3,6 +3,7 @@ import math
 import time
 from dataclasses import dataclass
 from parking.reeds_shepp_path_planning import reeds_shepp_path_planning
+from parking.staging_transform import get_target_transform
 from utils.path_utils import closest_nondecreasing_path_index, lookahead_index
 
 # dataclass to hold path data
@@ -37,10 +38,13 @@ class Controller:
         # )
 
         #TODO: get passed in from cam
+        """
         self.target_tf = carla.Transform( # THIS IS THE PARKING SPOT
             carla.Location(x=-29, y=-38.4, z=0.5), # set to a spot in the A row
             carla.Rotation(yaw=180),
         )
+        """
+        self.target_tf = get_target_transform()
 
         # control parameters to perform correction if the vehicle is not aligned with the parking spot
         self.final_alignment_distance = 1.0
