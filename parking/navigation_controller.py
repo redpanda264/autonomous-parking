@@ -15,8 +15,6 @@ class AStarPath:
     y: list[float]
 
 
-# TODO: fix start inside obstacle/outside region error
-
 class NavigationController:
     def __init__(self, ego, world):
         self.ego = ego
@@ -31,34 +29,11 @@ class NavigationController:
                 break
         self.aisle_rotation = carla.Rotation(yaw=90.0) # evil line that is suddenly required - rotation of the aisle where goal parking spot is located
 
-        #TODO: figure out whatever madness is happening here
-        #TODO: get passed in from cam
-        """
-        self.target_tf = carla.Transform( # THIS IS THE PARKING SPOT
-            carla.Location(x=-29, y=-38.4, z=0.5), # set to a spot in the A row
-            carla.Rotation(yaw=180),
-        )
-        """
+        # pass in target and staging from camera
         self.target_tf = get_target_transform()
-        
-        """
-        staging_loc = carla.Transform( # THIS IS THE STAGING LOCATION
-            self.target_tf.location + carla.Location(x=-5.0, y=-5.0),
-            carla.Rotation(yaw=-90.0)
-        )
-        """
-
         staging_loc = return_staging_transform()
 
-        # final staging transform
-        '''
-        self.staging_tf = carla.Transform(
-            staging_loc,
-            self.aisle_rotation
-        )
-        '''
         self.staging_tf = staging_loc
-
         start_tf = self.ego.get_transform()
 
         # A* setup

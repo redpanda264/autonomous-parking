@@ -25,25 +25,7 @@ class Controller:
         # x: + left, - right
         # y: + up, - down
 
-        # hard coded target location for parking spot
-        # self.target_tf = carla.Transform(
-        #     carla.Location(x=-13, y=-27.2, z=0.5),
-        #     carla.Rotation(yaw=180),
-        # )
-
-        #different spot
-        # self.target_tf = carla.Transform(
-        #     carla.Location(x=-13, y=-35.5, z=0.5),
-        #     carla.Rotation(yaw=180),
-        # )
-
-        #TODO: get passed in from cam
-        """
-        self.target_tf = carla.Transform( # THIS IS THE PARKING SPOT
-            carla.Location(x=-29, y=-38.4, z=0.5), # set to a spot in the A row
-            carla.Rotation(yaw=180),
-        )
-        """
+        # target parking spot from camera
         self.target_tf = get_target_transform()
 
         # control parameters to perform correction if the vehicle is not aligned with the parking spot
@@ -61,11 +43,10 @@ class Controller:
         target_yaw = math.radians(self.target_tf.rotation.yaw)
         self.target_forward = (math.cos(target_yaw), math.sin(target_yaw))
 
-        # assume car is aligned with the aisle
-        #TODO: change? or hardcode
+
         self.aisle_rotation = carla.Rotation(yaw=90.0) # hard coded for now, should be calculated from aisle
 
-        # TODO: Hard-coding wheelbase for now to calculate steering angle, this code is inconsistent. Change later.
+        # TODO: Hard-coding wheelbase for now to calculate steering angle, Change later.
         self.wheelbase = 1.571
 
         # use reeds-shepp curve, calculate once when in staging position
@@ -79,8 +60,8 @@ class Controller:
                 break
 
         ego_tf = ego.get_transform()
-        #ego_tf = self.staging_tf - if having issue with ego tf
-        #TODO: hardcoded, should approximately match the x and y distance from the staging location to the target parking spot
+
+        # Hardcoded, should approximately match the x and y distance from the staging location to the target parking spot
         min_turning_radius = 4.8 # meters
         max_curvature = 1.0 / min_turning_radius
 
@@ -200,118 +181,3 @@ class Controller:
         # might have to change throttle
         control = carla.VehicleControl(throttle=0.18, steer=steering_angle, brake=0.0, reverse=True)
         self.ego.apply_control(control)
-
-
-
-
-
-
-    #TODO: remove unused methods below, refactor.
-
-
-    # NEW METHOD: Correct the vehicle's alignment with the parking spot
-    def correct_alignment(self):
-        """Pull forward along the spot centerline, stop, then reverse into it."""
-        tf = self.ego.get_transform()
-        dx = tf.location.x - self.target_tf.location.x
-        dy = tf.location.y - self.target_tf.location.y
-        fx, fy = self.target_forward
-        along = dx * fx + dy * fy
-        lateral = -dx * fy + dy * fx
-        target_yaw = math.radians(self.target_tf.rotation.yaw)
-        heading_error = (math.radians(tf.rotation.yaw) - target_yaw + math.pi) % (2 * math.pi) - math.pi
-        velocity = self.ego.get_velocity()
-        speed = math.sqrt(velocity.x ** 2 + velocity.y ** 2 + velocity.z ** 2)
-        aligned = (math.hypot(dx, dy) <= self.position_tolerance
-                   and abs(heading_error) <= self.heading_tolerance)
-
-        def brake():
-            self.ego.apply_control(carla.VehicleControl(
-                throttle=0.0, steer=0.0, brake=1.0, reverse=self.correction_reverse))
-
-        # Keep this a small parking adjustment, with bounded retries and time.
-        if (abs(lateral) > 0.7 or abs(along) > 3.0
-                or abs(heading_error) > math.radians(45.0)
-                or time.monotonic() - self.correction_started_at > 90.0):
-            brake()
-            self.alignment_failed = True
-            self.correction_phase = None
-            print("Alignment correction stopped: maneuver limit exceeded")
-            return
-
-        if self.correction_phase == "verify":
-            brake()
-            if speed > 0.03:
-                return
-            if aligned:
-                self.parked = True
-                self.correction_phase = None
-                print("Reached target with parking alignment")
-            else:
-                self.correction_phase = "brake_forward"
-            return
-
-        if self.correction_phase in ("brake_forward", "brake_reverse"):
-            brake()
-            if speed > 0.03:
-                return
-            if self.correction_phase == "brake_forward":
-                if self.correction_attempts >= self.max_correction_attempts:
-                    self.alignment_failed = True
-                    self.correction_phase = None
-                    print("Alignment correction stopped: retry limit reached")
-                    return
-                self.correction_attempts += 1
-                self.correction_end_x = max(self.correction_pull_forward, along + 1.0)
-                self.correction_phase = "forward"
-                self.correction_reverse = False
-                print(f"Alignment correction {self.correction_attempts}: pull forward "
-                      f"(heading error={math.degrees(heading_error):.1f} deg)")
-            else:
-                self.correction_phase = "reverse"
-                self.correction_reverse = True
-                print("Alignment correction: reverse into spot")
-            return
-
-        reverse = self.correction_phase == "reverse"
-        if not reverse and along >= self.correction_end_x:
-            self.correction_phase = "brake_reverse"
-            brake()
-            return
-        if reverse and (aligned or along <= 0.0):
-            self.correction_phase = "verify"
-            brake()
-            return
-
-        direction = -1.0 if reverse else 1.0
-        # Direction-aware heading and lateral feedback stabilizes the same
-        # centerline in either gear; do not apply the pursuit reverse sign here.
-        curvature = -1.0 * lateral - direction * 2.5 * heading_error
-        steer = math.atan(self.wheelbase * curvature) / self.max_steer_angle
-        steer = max(-0.5, min(0.5, steer))
-        distance_left = max(0.0, along if reverse else self.correction_end_x - along)
-        desired_speed = min(0.4, max(0.18, distance_left * 0.5))
-        speed_error = desired_speed - speed
-        self.ego.apply_control(carla.VehicleControl(
-            throttle=min(0.2, max(0.0, speed_error * 0.5)),
-            steer=steer, brake=min(0.5, max(0.0, -speed_error * 0.5)),
-            reverse=reverse))
-
-
-
-    def get_relative_position(self):
-        ego_tf = self.ego.get_transform()
-        ego_loc = ego_tf.location
-        staging_loc = self.staging_tf.location
-
-        dx = staging_loc.x - ego_loc.x
-        dy = staging_loc.y - ego_loc.y
-        dz = staging_loc.z - ego_loc.z
-
-        # use ego vectors to find relative distance
-        forward = ego_tf.get_forward_vector()
-        right = ego_tf.get_right_vector()
-        relative_x = dx * forward.x + dy * forward.y + dz * forward.z
-        relative_y = dx * right.x + dy * right.y + dz * right.z
-
-        return relative_x, relative_y
