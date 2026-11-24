@@ -64,3 +64,4 @@ config.example.json
 config.example.json
 config.example.json
 parking/a_star2.py
+parking/parking_status.json
