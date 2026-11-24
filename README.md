@@ -1,79 +1,92 @@
-# autonomous-parking
-This project uses CARLA to simulate an autonomous parking system.
+# YOLO parking slot handoff
 
-## Credits & Requirements
-- CARLA Simulator
-- Python
-- CARLA Python API
-- Path Planning: The core Reeds-Shepp geometric formula used in this project is adapted from the open-source PythonRobotics repository by Atsushi Sakai. Licensed under the MIT License.
-- Docker: If machine does not support CARLA natively
+This folder contains the Town05 camera monitor, the 60-bay layout, and the YOLO11s weights. The handoff selects the highest-priority confirmed-free bay and computes the staging pose for A*.
 
-## Workflow
-### Configure the CARLA connection (once per machine)
+## Run the camera
 
-From the project root in PowerShell, copy the shared configuration:
+Start CARLA 0.9.16 on Town05. If CARLA is running in synchronous mode, keep the client that ticks the world running. Open PowerShell in this folder and use the existing `carla-sim312` environment if available. To set up a new Windows x64 Python 3.12 environment, install the bundled CARLA client wheel and the vision dependencies.
 
 ```powershell
-Copy-Item config.example.json config.local.json
+python -m pip install .\wheels\carla-0.9.16-cp312-cp312-win_amd64.whl -r requirements.txt
 ```
 
-Edit `config.local.json` to set your CARLA server address and port:
+Start the monitor with the bundled model, layout, and SAHI inference.
+
+```powershell
+python -m parking_slot_handoff.parking_monitor
+```
+
+The monitor opens three windows for **A/B**, **C/D**, and **E/F**. Each camera looks straight down at −90° pitch and is centered on its own bays. With the default image size and field of view, it sits 35 m above the lot. The three previews preserve the aspect ratio of each cropped camera image. Use `--no-display` to run the same three cameras without preview windows.
+
+The default connection is `localhost:2000`. Supply `--host` and `--port` if your simulator uses a different address. Each camera needs three consistent observations to confirm occupancy. All three feed one report, with the image and polygon coordinates associated with their camera. Press Q or Esc in the preview, or Ctrl+C in the terminal, to stop.
+
+### Full-lot view and camera angle
+
+Use `--single-camera` for the original 55 m view. Passing an explicit position or angle also selects the single camera. Use `--pitch` to tilt it, `--yaw` to turn it, and `--fov` to change the horizontal field of view.
+
+```powershell
+python -m parking_slot_handoff.parking_monitor --single-camera --pitch -75 --yaw 0
+```
+
+## Read the parking handoff
+
+Open a second terminal in this folder.
+
+```powershell
+python -m parking_slot_handoff
+```
+
+The command returns one JSON value with the fixed start, the selected bay, and the staging pose. The priority order is F1–F10, E1–E10, D1–D10, C1–C10, B1–B10, then A1–A10. Only confirmed-free bays are eligible. Coordinates are in CARLA world meters and headings are in degrees.
+
+| Rows | Staging X | Staging Y | Staging yaw |
+| --- | --- | --- | --- |
+| B, D, F | target X − 5 m | target Y − 5 m | 270° |
+| A, C, E | target X + 5 m | target Y − 5 m | 270° |
+
+This is the result when F1 is free.
 
 ```json
 {
-  "carla_host": "localhost",
-  "carla_port": 2000
+  "start": {"x": 15.8, "y": -22.1, "yaw_deg": 90.0},
+  "target": {"slot_id": "row_F-1", "x": -29.0435, "y": -18.7866, "yaw_deg": 180},
+  "staging": {"x": -34.0435, "y": -23.7866, "z": 1.0, "yaw_deg": 270.0}
 }
 ```
 
-Use `localhost` when CARLA is reachable on the same machine from your Python
-environment. When Python runs inside Docker and CARLA runs on the host machine,
-use `host.docker.internal` if your Docker setup provides that hostname. You can
-also specify the CARLA server's IP address or hostname.
+A fresh report with zero confirmed-free bays yields `null`. A missing, stale, or mismatched report yields exit code `2` and a diagnostic on stderr. The default maximum report age is three seconds. Use `--max-age` to change it. To reuse an existing SAHI camera process, pass its report with `--status` and its layout with `--slots`.
 
-`config.local.json` is ignored by Git, so each teammate keeps their own settings.
-Commit `config.example.json` and `utils/connection_config.py` with the shared code.
-If no local file exists, scripts use `config.example.json` (localhost:2000).
-Configuration paths are resolved relative to the project, not the terminal's
-current directory. No additional Python packages are required for configuration.
+### Read the staging transform
 
-### Run the project
-
-Start CARLA first, activate your Python environment with the project dependencies,
-then run these commands from the project root:
+With the monitor running, use this command in the second terminal to print Python code for the selected bay's staging transform.
 
 ```powershell
-python main.py
+python staging_transform.py
 ```
 
-Utility scripts can run directly or as modules, for example:
+The terminal shows the selected bay as a label above the code. For F1, it reads “The next available spot is F1”. The location uses the staging X and Y, and the rotation uses yaw 270°.
 
-```powershell
-python utils/set_daytime.py
-# Equivalent module command:
-python -m utils.set_daytime
+```python
+location = carla.Location(x=-34.0435, y=-23.7866)
+rotation = carla.Rotation(yaw=270.0)
+transform = carla.Transform(location, rotation)
 ```
 
-All custom scripts in `parking/setup.py` and `utils` use the same connection
-configuration. The original CARLA examples in `examples/` retain their own options.
+From Python, import `get_staging_transform` from `staging_transform` and call it to get the CARLA object. The function returns `None` if a fresh report has no confirmed-free bay.
 
-After downloading CARLA, you should find examples folder under ROOT\CARLA\PythonAPI\examples.\
-This examples folder contains some python scripts we can play around with.
-<img width="849" height="688" alt="explorer_CRC8oJmcj9" src="https://github.com/user-attachments/assets/6931512f-9d07-4670-a75a-367d39523d41" />
+## Call from A*
 
-We're running a conda environment called whatever under examples folder by using Anaconda Prompt.
-<img width="1113" height="626" alt="WindowsTerminal_WrlR8GhmZc" src="https://github.com/user-attachments/assets/0706902b-f6c1-4869-bc94-cf2b34b6f03f" />
+Add this folder to the planner's `PYTHONPATH`. With your teammate's initialized `AStarPlanner` instance, plan from the fixed start to staging.
 
-### How to create virtual environment
-$ conda create --name ENV_NAME python=3.12
+```python
+from parking_slot_handoff import get_parking_handoff
 
-### Active virtual environment
-$ activate ENV_NAME
+handoff = get_parking_handoff(map_name=world.get_map().name)
+if handoff is not None:
+    start = handoff['start']
+    staging = handoff['staging']
+    path_x, path_y = planner.planning(
+        start['x'], start['y'], staging['x'], staging['y']
+    )
+```
 
-### Additional packages recommended after activting an environment
-$ pip install carla\
-$ pip install jupyter\
-$ pip install pygame\
-$ pip install shapely\
-$ pip install networkx
-
+The grid planner consumes the world `x` and `y` values. Use the start pose to set the vehicle's CARLA transform through your simulator setup. The vehicle controller can use `staging['yaw_deg']` for alignment and `handoff['target']` for the final parking maneuver.
