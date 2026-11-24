@@ -27,9 +27,10 @@ Edit `config.local.json` to set your CARLA server address and port:
 ```
 
 Use `localhost` when CARLA is reachable on the same machine from your Python
-environment. When Python runs inside Docker and CARLA runs on the host machine,
+environment. When the CARLA server runs inside Docker and the CARLA client runs on the host machine,
 use `host.docker.internal` if your Docker setup provides that hostname. You can
-also specify the CARLA server's IP address or hostname.
+also specify the CARLA server's IP address or hostname. Running on a non-Windows machine
+may require additional steps to get working, including running the parking_monitor module headless.
 
 `config.local.json` is ignored by Git, so each teammate keeps their own settings.
 Commit `config.example.json` and `utils/connection_config.py` with the shared code.
@@ -41,6 +42,19 @@ current directory. No additional Python packages are required for configuration.
 
 Start CARLA first, activate your Python environment with the project dependencies,
 then run these commands from the project root:
+
+## Run the camera
+
+Start carla server and load Town05. Setup required environments. 
+
+Start the monitor with the bundled model, layout, and SAHI inference.
+
+```powershell
+python -m parking.parking_monitor
+```
+
+## Ready for running main.py script
+After monitors popup, YOLO camera system will acquire coordinates of target and staging area. Therefore, the vehicle is ready for autonomous parking.
 
 ```powershell
 python main.py
@@ -84,17 +98,3 @@ YOLO sahi is a object detection models with SAHI (Slicing Aided Hyper Inference)
 In our project, YOLO sahi works as three separate cameras for monitoring parking lot rows A/B, C/D, and E/F.
 
 YOLO camera system can detect and update available parking slots by requests.  
-
-
-## Run the camera
-
-Start carla server and load Town05. Setup required environments. 
-
-Start the monitor with the bundled model, layout, and SAHI inference.
-
-```powershell
-python -m parking.parking_monitor
-```
-
-## Ready for running main.py script
-After monitors popup, YOLO camera system will acquire coordinates of target and staging area. Therefore, the vehicle is ready for autonomous parking.
