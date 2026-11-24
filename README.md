@@ -38,12 +38,12 @@ If no local file exists, scripts use `config.example.json` (localhost:2000).
 Configuration paths are resolved relative to the project, not the terminal's
 current directory. No additional Python packages are required for configuration.
 
-### Run the project
+## Run the project
 
 Start CARLA first, activate your Python environment with the project dependencies,
 then run these commands from the project root:
 
-## Run the camera
+### Run the camera
 
 Start carla server and load Town05. Setup required environments. 
 
@@ -53,7 +53,7 @@ Start the monitor with the bundled model, layout, and SAHI inference.
 python -m parking.parking_monitor
 ```
 
-## Ready for running main.py script
+### Ready for running main.py script
 After monitors popup, YOLO camera system will acquire coordinates of target and staging area. Therefore, the vehicle is ready for autonomous parking.
 
 ```powershell
@@ -78,7 +78,7 @@ This examples folder contains some python scripts we can play around with.
 We're running a conda environment called whatever under examples folder by using Anaconda Prompt.
 <img width="1113" height="626" alt="WindowsTerminal_WrlR8GhmZc" src="https://github.com/user-attachments/assets/0706902b-f6c1-4869-bc94-cf2b34b6f03f" />
 
-### How to create virtual environment
+## How to create virtual environment
 $ conda create --name ENV_NAME python=3.12
 
 ### Active virtual environment
@@ -91,7 +91,7 @@ $ pip install pygame\
 $ pip install shapely\
 $ pip install networkx
 
-# YOLO camera system
+## YOLO camera system
 
 YOLO sahi is a object detection models with SAHI (Slicing Aided Hyper Inference) to detect small or distant objects in large, high-resolution images.
 
