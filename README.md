@@ -82,7 +82,7 @@ We're running a conda environment called whatever under examples folder by using
 $ conda create --name ENV_NAME python=3.12
 
 ### Active virtual environment
-$ activate ENV_NAME
+$ conda activate ENV_NAME
 
 ### Additional packages recommended after activting an environment
 $ pip install carla\
